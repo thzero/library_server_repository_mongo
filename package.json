@@ -1,0 +1,39 @@
+{
+  "name": "@thzero/library_server_repository_mongo",
+  "version": "0.6.17",
+  "version_major": 0,
+  "version_minor": 6,
+  "version_patch": 17,
+  "version_date": "07/17/2020",
+  "author": "thZero",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thzero/library_server_repository_mongo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thzero/library_server_repository_mongo/issues"
+  },
+  "homepage": "https://github.com/thzero/library_server_repository_mongo#readme",
+  "engines": {
+    "node": ">=13.0.1"
+  },
+  "scripts": {
+    "cli-update": "node -r esm ./cli.js --updateversion --pi",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@thzero/library": "npm:@thzero/library_server@^0.6.17",
+    "mongodb": "^3.5.9"
+  },
+  "peerDependencies": {
+    "@babel/core": "^7.10.5",
+    "@babel/plugin-proposal-class-properties": "^7.10.4",
+    "@babel/preset-env": "^7.10.4",
+    "babel-loader": "^8.1.0",
+    "eslint": "^7.4.0",
+    "eslint-plugin-node": "^11.1.0",
+    "webpack": "^4.43.0",
+    "webpack-cli": "^3.3.12"
+  }
+}
