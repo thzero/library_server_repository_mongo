@@ -7,22 +7,6 @@ class BaseCollectionsService extends Service {
 		throw new NotImplementedError();
 	}
 
-	getCollectionNews() {
-		throw new NotImplementedError();
-	}
-
-	getCollectionPlans() {
-		throw new NotImplementedError();
-	}
-
-	getCollectionUsageMetrics() {
-		throw new NotImplementedError();
-	}
-
-	getCollectionUsers() {
-		throw new NotImplementedError();
-	}
-
 	_getCollection(clientName, databaseName, collectionName) {
 		if (String.isNullOrEmpty(clientName))
 			throw Error('Invalid collection client name.');
