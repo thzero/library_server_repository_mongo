@@ -1,6 +1,13 @@
 import MongoRepository from './index';
 
 class PlansMongoRepository extends MongoRepository {
+	async find(planId, project) {
+		const collectionPlan = await this._getCollectionPlans();
+		const response = this._initResponse();
+		response.results = await this._findOne(collectionPlan, { 'id': planId }, project);
+		return response;
+}
+
 	async listing(correlationId) {
 		const collection = await this._getCollectionPlans();
 		const response = this._initResponse();

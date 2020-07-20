@@ -1,3 +1,5 @@
+import LibraryConstants from '@thzero/library/constants';
+
 import Utility from '@thzero/library/utility';
 
 import NotImplementedError from '@thzero/library/errors/notImplemented';
@@ -5,6 +7,12 @@ import NotImplementedError from '@thzero/library/errors/notImplemented';
 import MongoRepository from './index';
 
 class BaseUserMongoRepository extends MongoRepository {
+	async init(injector) {
+		await super.init(injector);
+
+		this._repositoryPlans = this._injector.getService(LibraryConstants.InjectorKeys.REPOSITORY_PLANS);
+	}
+
 	async fetch(correlationId, userId, excludePlan) {
 		const response = this._initResponse();
 
@@ -13,8 +21,25 @@ class BaseUserMongoRepository extends MongoRepository {
 		response.success = response.results !== null;
 
 		if (!excludePlan && response && response.success && response.results) {
-			const collectionPlan = await this._getCollectionPlans();
-			response.results.plan = await this._findOne(collectionPlan, {'id': response.results.planId});
+			const planResponse = await this._repositoryPlans.find(response.results.planId);
+			if (planResponse.success)
+				response.results.plan = planResponse.results;
+		}
+
+		return response;
+	}
+
+	async fetchByExternalId(correlationId, userId, excludePlan) {
+		const response = this._initResponse();
+
+		const collectionUsers = await this._getCollectionUsers();
+		response.results = await this._findOne(collectionUsers, { 'external.id': userId });
+		response.success = response.results !== null;
+
+		if (!excludePlan && response && response.success && response.results) {
+			const planResponse = await this._repositoryPlans.find(response.results.planId, {
+				'roles': 0
+			});
 		}
 
 		return response;
