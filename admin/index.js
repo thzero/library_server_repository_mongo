@@ -1,4 +1,4 @@
-import NotImplementedError from '@thzero/library/errors/notImplemented';
+import NotImplementedError from '@thzero/library_common/errors/notImplemented';
 
 import MongoRepository from '../index';
 

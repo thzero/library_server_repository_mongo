@@ -1,6 +1,6 @@
 import BaseCollectionsService from './index';
 
-import NotImplementedError from '@thzero/library/errors/notImplemented';
+import NotImplementedError from '@thzero/library_common/errors/notImplemented';
 
 class BaseApiCollectionsService extends BaseCollectionsService {
 	getCollectionUsageMetrics() {

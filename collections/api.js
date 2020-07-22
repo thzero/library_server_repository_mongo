@@ -1,6 +1,6 @@
 import BaseApiCollectionsService from './baseApi';
 
-import NotImplementedError from '@thzero/library/errors/notImplemented';
+import NotImplementedError from '@thzero/library_common/errors/notImplemented';
 
 class ApiCollectionsService extends BaseApiCollectionsService {
 	getCollectionNews() {
