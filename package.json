@@ -1,10 +1,10 @@
 {
   "name": "@thzero/library_server_repository_mongo",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "version_major": 0,
   "version_minor": 7,
-  "version_patch": 4,
-  "version_date": "07/19/2020",
+  "version_patch": 5,
+  "version_date": "07/22/2020",
   "author": "thZero",
   "license": "MIT",
   "repository": {
@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@thzero/library": "npm:@thzero/library_server@^0.6.17",
+    "@thzero/library_common": "^0.7.7",
     "mongodb": "^3.5.9"
   },
   "peerDependencies": {
