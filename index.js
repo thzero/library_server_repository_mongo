@@ -3,7 +3,7 @@ import { Mutex as asyncMutex } from 'async-mutex';
 
 import RepositoryConstants from './constants';
 
-import Utility from '@thzero/liblibrary_commonrary/utility';
+import Utility from '@thzero/library_common/utility';
 
 import Repository from '@thzero/library/repository/index';
 import Response from '@thzero/library_common/response';
