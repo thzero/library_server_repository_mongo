@@ -1,6 +1,6 @@
 import Service from '@thzero/library/service';
 
-import NotImplementedError from '@thzero/library/library_common/notImplemented';
+import NotImplementedError from '@thzero/library_common/errors/notImplemented';
 
 class BaseCollectionsService extends Service {
 	getClientName() {
