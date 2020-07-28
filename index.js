@@ -5,7 +5,7 @@ import RepositoryConstants from './constants';
 
 import Utility from '@thzero/library_common/utility';
 
-import Repository from '@thzero/library/repository/index';
+import Repository from '@thzero/library_server/repository/index';
 import Response from '@thzero/library_common/response';
 import ExtractResponse from '@thzero/library_common/response/extract';
 
