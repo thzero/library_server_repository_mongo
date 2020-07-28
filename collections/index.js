@@ -1,4 +1,4 @@
-import Service from '@thzero/library/service';
+import Service from '@thzero/library_server/service';
 
 import NotImplementedError from '@thzero/library_common/errors/notImplemented';
 
