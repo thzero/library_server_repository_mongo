@@ -1,9 +1,9 @@
 {
   "name": "@thzero/library_server_repository_mongo",
-  "version": "0.7.20",
+  "version": "0.7.21",
   "version_major": 0,
   "version_minor": 7,
-  "version_patch": 20,
+  "version_patch": 21,
   "version_date": "07/28/2020",
   "author": "thZero",
   "license": "MIT",
@@ -23,19 +23,9 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@thzero/library_server": "^0.7.20",
+    "@thzero/library_server": "^0.7.21",
     "@thzero/library_common": "^0.7.12",
     "mongodb": "^3.5.9"
-  },
-  "peerDependencies": {
-    "@babel/core": "^7.10.5",
-    "@babel/plugin-proposal-class-properties": "^7.10.4",
-    "@babel/preset-env": "^7.10.4",
-    "babel-loader": "^8.1.0",
-    "eslint": "^7.5.0",
-    "eslint-plugin-node": "^11.1.0",
-    "webpack": "^4.44.0",
-    "webpack-cli": "^3.3.12"
   },
   "devDependencies": {
     "@thzero/library_cli": "^0.6.16"
