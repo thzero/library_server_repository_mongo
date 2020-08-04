@@ -16,7 +16,7 @@
   },
   "homepage": "https://github.com/thzero/library_server_repository_mongo#readme",
   "engines": {
-    "node": ">=13.0.1"
+    "node": ">=12.8.3"
   },
   "scripts": {
     "cli-update": "./node_modules/.bin/library-cli --updateversion --pi",
