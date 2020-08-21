@@ -85,17 +85,6 @@ class MongoRepository extends Repository {
 		return (results && (results.deletedCount > 0));
 	}
 
-	_error(message, err, code) {
-		return Response.error(message, err, code);
-	}
-
-	_errorResponse(response) {
-		if (!response)
-			return Response.error();
-
-		return Response.error(response.message, response.err, response.code);
-	}
-
 	async _fetch(cursor) {
 		const results = await cursor.toArray();
 		return (results && (results.length > 0) ? results[0] : null);
@@ -225,18 +214,6 @@ class MongoRepository extends Repository {
 		}
 
 		return db;
-	}
-
-	_initResponse() {
-		return new Response();
-	}
-
-	_initResponseExtract() {
-		return new ExtractResponse();
-	}
-
-	_success() {
-		return this._initResponse();
 	}
 
 	async _transactionAbort(session, message, err) {
