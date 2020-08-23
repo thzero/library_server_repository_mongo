@@ -217,10 +217,10 @@ class MongoRepository extends Repository {
 	async _transactionAbort(session, message, err) {
 		try {
 			await session.abortTransaction();
-			return this._error(message, err);
+			return this._error('MongoRepository', '_transactionAbort', message, err);
 		}
 		catch (err2) {
-			return this._error(message, err2);
+			return this._error('MongoRepository', '_transactionAbort', message, err2);
 		}
 	}
 
@@ -247,7 +247,7 @@ class MongoRepository extends Repository {
 		value.updatedUserId = userId;
 		const results = await collection.replaceOne({'id': id}, value, {upsert: true});
 		if (!this._checkUpdate(results))
-			return this._error('Invalid update.');
+			return this._error('MongoRepository', '_update', 'Invalid update.');
 
 		response.results = value;
 		return response;
