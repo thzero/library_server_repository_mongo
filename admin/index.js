@@ -5,7 +5,7 @@ import MongoRepository from '../index';
 class BaseAdminMongoRepository extends MongoRepository {
 	async create(correlationId, userId, value) {
 		if (!this._allowsCreate)
-			return this._error();
+			return this._error('BaseAdminMongoRepository', 'create', 'Not authorized');
 
 		const collection = await this._getCollectionAdmin();
 		const client = await this._getClient();
@@ -30,7 +30,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 	async delete(correlationId, id) {
 		if (!this._allowsDelete)
-			return this._error();
+			return this._error('BaseAdminMongoRepository', 'delete', 'Not authorized');
 
 		const collection = await this._getCollectionAdmin();
 		const response = this._initResponse();
@@ -73,7 +73,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 	async update(correlationId, userId, value) {
 		if (!this._allowsUpdate)
-			return this._error();
+			return this._error('BaseAdminMongoRepository', 'update', 'Not authorized');
 
 		const collection = await this._getCollectionAdmin();
 		const client = await this._getClient();

@@ -52,7 +52,7 @@ class BaseUserMongoRepository extends MongoRepository {
 
 		const results = await collection.replaceOne({ 'id': id }, user, {upsert: true});
 		if (!this._checkUpdate(results))
-			return this._error('Invalid user update.');
+			return this._error('BaseUserMongoRepository', 'updateFromExternal', 'Invalid user update.');
 
 		const response = this._initResponse();
 		response.results = user;
@@ -69,7 +69,7 @@ class BaseUserMongoRepository extends MongoRepository {
 
 			const user = await this._findOne(collection, {'id': id});
 			if (!user)
-				return this._error('No user found.');
+				return this._error('BaseUserMongoRepository', 'updatePlan', 'No user found.');
 			user.planId = planId;
 			user.updatedTimestamp = Utility.getTimestamp();
 			const response = this._initResponse();
@@ -100,7 +100,7 @@ class BaseUserMongoRepository extends MongoRepository {
 				data.updatedTimestamp = Utility.getTimestamp();
 				const results = await collection.replaceOne({ 'id': id }, data, { upsert: true });
 				if (!this._checkUpdate(results))
-					return this._error('Invalid settings update.');
+					return this._error('BaseUserMongoRepository', 'updateSettings', 'Invalid settings update.');
 			}
 			const response = this._initResponse();
 			response.results = data;
