@@ -4,7 +4,7 @@ class UsageMetricsMongoRepository extends MongoRepository {
 	async register(usageMetrics) {
 		const collection = await this._getCollectionUsageMetrics();
 		await collection.insertOne(usageMetrics);
-		return this._success();
+		return this._success(usageMetrics ? usageMetrics.correlationId : null);
 	}
 
 	async _getCollectionUsageMetrics() {
