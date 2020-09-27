@@ -2,13 +2,14 @@ import MongoRepository from './index';
 
 class UsageMetricsMongoRepository extends MongoRepository {
 	async register(usageMetrics) {
-		const collection = await this._getCollectionUsageMetrics();
+		const correlationid = usageMetrics ? usageMetrics.correlationId : null;
+		const collection = await this._getCollectionUsageMetrics(correlationid);
 		await collection.insertOne(usageMetrics);
-		return this._success(usageMetrics ? usageMetrics.correlationId : null);
+		return this._success(correlationid);
 	}
 
-	async _getCollectionUsageMetrics() {
-		return await this._getCollectionFromConfig(this._collectionsConfig.getCollectionUsageMetrics());
+	async _getCollectionUsageMetrics(correlationId) {
+		return await this._getCollectionFromConfig(correlationId, this._collectionsConfig.getCollectionUsageMetrics());
 	}
 }
 

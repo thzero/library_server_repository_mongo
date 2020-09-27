@@ -13,8 +13,8 @@ class BaseUsersMongoRepository extends BaseAdminMongoRepository {
 		return true
 	}
 
-	async _getCollectionAdmin() {
-		return await this._getCollectionFromConfig(this._collectionsConfig.getCollectionUsers());
+	async _getCollectionAdmin(correlationId) {
+		return await this._getCollectionFromConfig(correlationId, this._collectionsConfig.getCollectionUsers());
 	}
 }
 

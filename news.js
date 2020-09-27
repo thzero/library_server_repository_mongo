@@ -8,8 +8,8 @@ class NewsMongoRepository extends MongoRepository {
 		return response;
 	}
 
-	async _getCollectionNews() {
-		return await this._getCollectionFromConfig(this._collectionsConfig.getCollectionNews());
+	async _getCollectionNews(correlationId) {
+		return await this._getCollectionFromConfig(correlationId, this._collectionsConfig.getCollectionNews());
 	}
 }
 
