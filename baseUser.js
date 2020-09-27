@@ -14,7 +14,7 @@ class BaseUserMongoRepository extends MongoRepository {
 	}
 
 	async fetch(correlationId, userId, excludePlan) {
-		const response = this._initResponse();
+		const response = this._initResponse(correlationId);
 
 		const collectionUsers = await this._getCollectionUsers();
 		response.results = await this._findOne(collectionUsers, {'id': userId});
@@ -30,7 +30,7 @@ class BaseUserMongoRepository extends MongoRepository {
 	}
 
 	async fetchByExternalId(correlationId, userId, excludePlan) {
-		const response = this._initResponse();
+		const response = this._initResponse(correlationId);
 
 		const collectionUsers = await this._getCollectionUsers();
 		response.results = await this._findOne(collectionUsers, { 'external.id': userId });
@@ -52,9 +52,9 @@ class BaseUserMongoRepository extends MongoRepository {
 
 		const results = await collection.replaceOne({ 'id': id }, user, {upsert: true});
 		if (!this._checkUpdate(results))
-			return this._error('BaseUserMongoRepository', 'updateFromExternal', 'Invalid user update.');
+			return this._error('BaseUserMongoRepository', 'updateFromExternal', 'Invalid user update.', null, null, null, correlationId);
 
-		const response = this._initResponse();
+		const response = this._initResponse(correlationId);
 		response.results = user;
 		return response;
 	}
@@ -69,17 +69,17 @@ class BaseUserMongoRepository extends MongoRepository {
 
 			const user = await this._findOne(collection, {'id': id});
 			if (!user)
-				return this._error('BaseUserMongoRepository', 'updatePlan', 'No user found.');
+				return this._error('BaseUserMongoRepository', 'updatePlan', 'No user found.', null, null, null, correlationId);
 			user.planId = planId;
 			user.updatedTimestamp = Utility.getTimestamp();
-			const response = this._initResponse();
+			const response = this._initResponse(correlationId);
 			response.results = user;
 
 			await this._transactionCommit(session);
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(session, null, err);
+			return this._transactionAbort(correlationId, session, null, err);
 		}
 		finally {
 			await this._transactionEnd(session);
@@ -100,16 +100,16 @@ class BaseUserMongoRepository extends MongoRepository {
 				data.updatedTimestamp = Utility.getTimestamp();
 				const results = await collection.replaceOne({ 'id': id }, data, { upsert: true });
 				if (!this._checkUpdate(results))
-					return this._error('BaseUserMongoRepository', 'updateSettings', 'Invalid settings update.');
+					return this._error('BaseUserMongoRepository', 'updateSettings', 'Invalid settings update.', null, null, null, correlationId);
 			}
-			const response = this._initResponse();
+			const response = this._initResponse(correlationId);
 			response.results = data;
 
 			await this._transactionCommit(session);
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(session, null, err);
+			return this._transactionAbort(correlationId, session, null, err);
 		}
 		finally {
 			await this._transactionEnd(session);

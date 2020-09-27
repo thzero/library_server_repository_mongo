@@ -15,13 +15,13 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 			const response = await this._create(collection, userId, value);
 			if (!response || !response.success)
-				return this._transactionAbort(session, 'Unable to insert the value');
+				return this._transactionAbort(correlationId, session, 'Unable to insert the value', null, null, null, correlationId);
 
 			await this._transactionCommit(session);
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(session, null, err);
+			return this._transactionAbort(correlationId, session, null, err);
 		}
 		finally {
 			await this._transactionEnd(session);
@@ -30,17 +30,17 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 	async delete(correlationId, id) {
 		if (!this._allowsDelete)
-			return this._error('BaseAdminMongoRepository', 'delete', 'Not authorized');
+			return this._error('BaseAdminMongoRepository', 'delete', 'Not authorized', null, null, null, correlationId);
 
 		const collection = await this._getCollectionAdmin();
-		const response = this._initResponse();
+		const response = this._initResponse(correlationId);
 		response.success = await this._deleteOne(collection, { id: id});
 		return response;
 	}
 
 	async fetch(correlationId, id) {
 		const collection = await this._getCollectionAdmin();
-		const response = this._initResponse();
+		const response = this._initResponse(correlationId);
 		response.results = await this._fetch(await this._find(collection, { id: id }));
 		response.success = response.results != null;
 		return response;
@@ -49,7 +49,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 	// eslint-disable-next-line
 	async search(correlationId, params) {
 		const collection = await this._getCollectionAdmin();
-		const response = this._initResponse();
+		const response = this._initResponse(correlationId);
 
 		const defaultFilter = { };
 
@@ -67,13 +67,13 @@ class BaseAdminMongoRepository extends MongoRepository {
 			$project: this._searchProjection({ '_id': 0 })
 		});
 
-		response.results = await this._aggregateExtract(await this._find(collection, queryF), await this._aggregate(collection, queryA), this._initResponseExtract());
+		response.results = await this._aggregateExtract(await this._find(collection, queryF), await this._aggregate(collection, queryA), this._initResponseExtract(correlationId));
 		return response;
 	}
 
 	async update(correlationId, userId, value) {
 		if (!this._allowsUpdate)
-			return this._error('BaseAdminMongoRepository', 'update', 'Not authorized');
+			return this._error('BaseAdminMongoRepository', 'update', 'Not authorized', null, null, null, correlationId);
 
 		const collection = await this._getCollectionAdmin();
 		const client = await this._getClient();
@@ -83,13 +83,13 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 			const response = await this._update(collection, userId, value.id, value);
 			if (!response || !response.success)
-				return this._transactionAbort(session, 'Unable to update the value');
+				return this._transactionAbort(correlationId, session, 'Unable to update the value');
 
 			await this._transactionCommit(session);
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(session, null, err);
+			return this._transactionAbort(correlationId, session, null, err);
 		}
 		finally {
 			await this._transactionEnd(session);
