@@ -21,7 +21,7 @@ class BaseUserMongoRepository extends MongoRepository {
 		response.success = response.results !== null;
 
 		if (!excludePlan && response && response.success && response.results) {
-			const planResponse = await this._repositoryPlans.find(response.results.planId);
+			const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId);
 			if (planResponse.success)
 				response.results.plan = planResponse.results;
 		}
@@ -37,7 +37,7 @@ class BaseUserMongoRepository extends MongoRepository {
 		response.success = response.results !== null;
 
 		if (!excludePlan && response && response.success && response.results) {
-			const planResponse = await this._repositoryPlans.find(response.results.planId, {
+			const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId, {
 				'roles': 0
 			});
 		}
