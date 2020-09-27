@@ -7,7 +7,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 		if (!this._allowsCreate)
 			return this._error('BaseAdminMongoRepository', 'create', 'Not authorized');
 
-		const collection = await this._getCollectionAdmin(correlationid);
+		const collection = await this._getCollectionAdmin(correlationId);
 		const client = await this._getClient(correlationId);
 		const session = await this._transactionInit(client);
 		try {
@@ -32,14 +32,14 @@ class BaseAdminMongoRepository extends MongoRepository {
 		if (!this._allowsDelete)
 			return this._error('BaseAdminMongoRepository', 'delete', 'Not authorized', null, null, null, correlationId);
 
-		const collection = await this._getCollectionAdmin(correlationid);
+		const collection = await this._getCollectionAdmin(correlationId);
 		const response = this._initResponse(correlationId);
 		response.success = await this._deleteOne(collection, { id: id});
 		return response;
 	}
 
 	async fetch(correlationId, id) {
-		const collection = await this._getCollectionAdmin(correlationid);
+		const collection = await this._getCollectionAdmin(correlationId);
 		const response = this._initResponse(correlationId);
 		response.results = await this._fetch(await this._find(collection, { id: id }));
 		response.success = response.results != null;
@@ -48,7 +48,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 	// eslint-disable-next-line
 	async search(correlationId, params) {
-		const collection = await this._getCollectionAdmin(correlationid);
+		const collection = await this._getCollectionAdmin(correlationId);
 		const response = this._initResponse(correlationId);
 
 		const defaultFilter = { };
