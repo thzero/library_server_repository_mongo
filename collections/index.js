@@ -7,13 +7,10 @@ class BaseCollectionsService extends Service {
 		throw new NotImplementedError();
 	}
 
-	_getCollection(clientName, databaseName, collectionName) {
-		if (String.isNullOrEmpty(clientName))
-			throw Error('Invalid collection client name.');
-		if (String.isNullOrEmpty(databaseName))
-			throw Error('Invalid collection database name.');
-		if (String.isNullOrEmpty(collectionName))
-			throw Error('Invalid collection name.');
+	_getCollection(correlationId, clientName, databaseName, collectionName) {
+		this._enforceNotEmpty('BaseCollectionsService', '_getCollection', 'clientName', clientName, correlationId);
+		this._enforceNotEmpty('BaseCollectionsService', '_getCollection', 'databaseName', databaseName, correlationId);
+		this._enforceNotEmpty('BaseCollectionsService', '_getCollection', 'collectionName', collectionName, correlationId);
 
 		return {
 			clientName: clientName,

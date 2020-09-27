@@ -113,35 +113,29 @@ class MongoRepository extends Repository {
 		return await collection.findOne(query, options);
 	}
 
-	async _getClient() {
-		return await this._initializeClient(this._initClientName());
+	async _getClient(correlationId) {
+		return await this._initializeClient(correlationId, this._initClientName());
 	}
 
-	async _getCollection(clientName, databaseName, collectionName) {
-		if (String.isNullOrEmpty(collectionName))
-			throw Error('Invalid collection name.');
+	async _getCollection(correlationId, clientName, databaseName, collectionName) {
+		this._enforceNotEmpty('MongoRepository', '_getCollection', 'collectionName', collectionName, correlationId);
 
-		const db = await this._initializeDb(clientName, databaseName);
+		const db = await this._initializeDb(correlationId, clientName, databaseName);
 		return await db.collection(collectionName);
 	}
 
-	async _getCollectionFromConfig(config) {
-		if (!config)
-			throw Error('Invalid collection config.');
-		if (String.isNullOrEmpty(config.clientName))
-			throw Error('Invalid collection config client name.');
-		if (String.isNullOrEmpty(config.databaseName))
-			throw Error('Invalid collection config database name.');
-		if (String.isNullOrEmpty(config.collectionName))
-			throw Error('Invalid collection config collection name.');
+	async _getCollectionFromConfig(correlationId, config) {
+		this._enforceNotNull('MongoRepository', '_getCollectionFromConfig', 'config', config, correlationId);
+		this._enforceNotEmpty('MongoRepository', '_getCollectionFromConfig', 'config.clientName', config.clientName, correlationId);
+		this._enforceNotEmpty('MongoRepository', '_getCollectionFromConfig', 'config.databaseName', config.databaseName, correlationId);
+		this._enforceNotEmpty('MongoRepository', '_getCollectionFromConfig', 'config.collectionName', config.collectionName, correlationId);
 
-		const db = await this._initializeDb(config.clientName, config.databaseName);
+		const db = await this._initializeDb(correlationId, config.clientName, config.databaseName);
 		return await db.collection(config.collectionName);
 	}
 
-	async _initializeClient(clientName) {
-		if (String.isNullOrEmpty(clientName))
-			throw Error('Invalid client name.');
+	async _initializeClient(correlationId, clientName) {
+		this._enforceNotEmpty('MongoRepository', '_initializeClient', 'clientName', clientName, correlationId);
 
 		let client = MongoRepository._client[clientName];
 		if (client)
@@ -160,8 +154,7 @@ class MongoRepository extends Repository {
 				});
 				MongoRepository._client[clientName] = client;
 
-				if (!client)
-					throw Error('No client');
+				this._enforceNotNull('MongoRepository', '_initializeClient', 'client', client, correlationId);
 			}
 			catch (err) {
 				throw err;
@@ -178,11 +171,10 @@ class MongoRepository extends Repository {
 		return this._collectionsConfig.getClientName();
 	}
 
-	async _initializeDb(clientName, databaseName) {
+	async _initializeDb(correlationId, clientName, databaseName) {
 		if (String.isNullOrEmpty(databaseName))
-		databaseName = this._config.get('db.name');
-		if (String.isNullOrEmpty(databaseName))
-			throw Error('Invalid db name.');
+			databaseName = this._config.get('db.name');
+		this._enforceNotEmpty('MongoRepository', '_initializeDb', 'databaseName', databaseName, correlationId);
 
 		let db = MongoRepository._db[databaseName];
 		if (db)
@@ -195,13 +187,12 @@ class MongoRepository extends Repository {
 				return db;
 
 			try {
-				const client = await this._initializeClient(clientName);
+				const client = await this._initializeClient(correlationId, clientName);
 				const databaseName = this._config.get(`db.${clientName}.name`);
 				db = client.db(databaseName);
 				MongoRepository._db[databaseName] = db;
 
-				if (!db)
-					throw Error('No db');
+				this._enforceNotNull('MongoRepository', '_initializeDb', 'db', db, correlationId);
 			}
 			catch (err) {
 				throw err;

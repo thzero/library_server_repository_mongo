@@ -16,7 +16,7 @@ class BaseUserMongoRepository extends MongoRepository {
 	async fetch(correlationId, userId, excludePlan) {
 		const response = this._initResponse(correlationId);
 
-		const collectionUsers = await this._getCollectionUsers();
+		const collectionUsers = await this._getCollectionUsers(correlationId);
 		response.results = await this._findOne(collectionUsers, {'id': userId});
 		response.success = response.results !== null;
 
@@ -32,7 +32,7 @@ class BaseUserMongoRepository extends MongoRepository {
 	async fetchByExternalId(correlationId, userId, excludePlan) {
 		const response = this._initResponse(correlationId);
 
-		const collectionUsers = await this._getCollectionUsers();
+		const collectionUsers = await this._getCollectionUsers(correlationId);
 		response.results = await this._findOne(collectionUsers, { 'external.id': userId });
 		response.success = response.results !== null;
 
@@ -47,7 +47,7 @@ class BaseUserMongoRepository extends MongoRepository {
 
 	async updateFromExternal(correlationId, id, user) {
 		const timestamp = Utility.getTimestamp();
-		const collection = await this._getCollectionUsers();
+		const collection = await this._getCollectionUsers(correlationId);
 		user.updatedTimestamp = timestamp;
 
 		const results = await collection.replaceOne({ 'id': id }, user, {upsert: true});
@@ -60,9 +60,9 @@ class BaseUserMongoRepository extends MongoRepository {
 	}
 
 	async updatePlan(correlationId, id, planId) {
-		const collection = await this._getCollectionUsers();
+		const collection = await this._getCollectionUsers(correlationId);
 
-		const client = await this._getClient();
+		const client = await this._getClient(correlationId);
 		const session = await this._transactionInit(client);
 		try {
 			await this._transactionStart(session);
@@ -87,9 +87,9 @@ class BaseUserMongoRepository extends MongoRepository {
 	}
 
 	async updateSettings(correlationId, id, settings) {
-		const collection = await this._getCollectionUsers();
+		const collection = await this._getCollectionUsers(correlationId);
 
-		const client = await this._getClient();
+		const client = await this._getClient(correlationId);
 		const session = await this._transactionInit(client);
 		try {
 			await this._transactionStart(session);
@@ -119,12 +119,12 @@ class BaseUserMongoRepository extends MongoRepository {
 	_externalUserProjection(projection) {
 	}
 
-	async _getCollectionPlans() {
-		return await this._getCollectionFromConfig(this._collectionsConfig.getCollectionPlans());
+	async _getCollectionPlans(correlationId) {
+		return await this._getCollectionFromConfig(correlationId, this._collectionsConfig.getCollectionPlans());
 	}
 
-	async _getCollectionUsers() {
-		return await this._getCollectionFromConfig(this._collectionsConfig.getCollectionUsers());
+	async _getCollectionUsers(correlationId) {
+		return await this._getCollectionFromConfig(correlationId, this._collectionsConfig.getCollectionUsers());
 	}
 
 	_getDefaultPlan() {
