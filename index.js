@@ -25,7 +25,7 @@ class MongoRepository extends Repository {
 		this._collectionsConfig = this._injector.getService(RepositoryConstants.InjectorKeys.SERVICE_REPOSITORY_COLLECTIONS);
 	}
 
-	async _aggregate(collection, query) {
+	async _aggregate(correlationId, collection, query) {
 		if (Array.isArray(query)) {
 			query.push({
 				$project: { '_id': 0 }
@@ -34,14 +34,14 @@ class MongoRepository extends Repository {
 		return await collection.aggregate(query);
 	}
 
-	async _aggregateExtract(cursor, aggregateCursor, response) {
+	async _aggregateExtract(correlationId, cursor, aggregateCursor, response) {
 		response.total = await cursor.count();
 		response.data = await aggregateCursor.toArray();
 		response.count = response.data.length;
 		return response;
 	}
 
-	_checkUpdate(results) {
+	_checkUpdate(correlationId, results) {
 		if (!results)
 			return false;
 
@@ -55,8 +55,8 @@ class MongoRepository extends Repository {
 		return await cursor.count();
 	}
 
-	async _create(collection, userId, value) {
-		const response = this._initResponse();
+	async _create(correlationId, collection, userId, value) {
+		const response = this._initResponse(correlationId);
 
 		value.id = value.id ? value.id : Utility.generateId();
 		value.createdTimestamp = Utility.getTimestamp();
@@ -69,8 +69,8 @@ class MongoRepository extends Repository {
 		return response;
 	}
 
-	async _delete(collection, filter) {
-		const response = this._initResponse();
+	async _delete(correlationId, collection, filter) {
+		const response = this._initResponse(correlationId);
 
 		const results = await collection.deleteOne(filter);
 
@@ -78,24 +78,24 @@ class MongoRepository extends Repository {
 		return response;
 	}
 
-	async _deleteOne(collection, query) {
+	async _deleteOne(correlationId, collection, query) {
 		const results = await collection.deleteOne(query);
 		return (results && (results.deletedCount > 0));
 	}
 
-	async _fetch(cursor) {
+	async _fetch(correlationId, cursor) {
 		const results = await cursor.toArray();
 		return (results && (results.length > 0) ? results[0] : null);
 	}
 
-	async _fetchExtract(cursor, response) {
+	async _fetchExtract(correlationId, cursor, response) {
 		response.total = await cursor.count();
 		response.data = await cursor.toArray();
 		response.count = response.data.length;
 		return response;
 	}
 
-	async _find(collection, query, projection) {
+	async _find(correlationId, collection, query, projection) {
 		const options = {}
 		projection = projection ? projection : {};
 		if (!projection['_id'])
@@ -104,7 +104,7 @@ class MongoRepository extends Repository {
 		return await collection.find(query, options);
 	}
 
-	async _findOne(collection, query, projection) {
+	async _findOne(correlationId, collection, query, projection) {
 		const options = {}
 		projection = projection ? projection : {};
 		if (!projection['_id'])
@@ -215,29 +215,29 @@ class MongoRepository extends Repository {
 		}
 	}
 
-	async _transactionCommit(session) {
+	async _transactionCommit(correlationId, session) {
 		await session.commitTransaction();
 	}
 
-	async _transactionInit(client) {
+	async _transactionInit(correlationId, client) {
 		return await client.startSession();
 	}
 
-	async _transactionEnd(session) {
+	async _transactionEnd(correlationId, session) {
 		return await session.endSession();
 	}
 
-	async _transactionStart(session) {
+	async _transactionStart(correlationId, session) {
 		session.startTransaction();
 	}
 
-	async _update(collection, userId, id, value) {
-		const response = this._initResponse();
+	async _update(correlationId, collection, userId, id, value) {
+		const response = this._initResponse(correlationId);
 
 		value.updatedTimestamp = Utility.getTimestamp();
 		value.updatedUserId = userId;
 		const results = await collection.replaceOne({'id': id}, value, {upsert: true});
-		if (!this._checkUpdate(results))
+		if (!this._checkUpdate(correlationId, results))
 			return this._error('MongoRepository', '_update', 'Invalid update.', null, null, null, correlationId);
 
 		response.results = value;
