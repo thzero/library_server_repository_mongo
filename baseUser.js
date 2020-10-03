@@ -17,7 +17,7 @@ class BaseUserMongoRepository extends MongoRepository {
 		const response = this._initResponse(correlationId);
 
 		const collectionUsers = await this._getCollectionUsers(correlationId);
-		response.results = await this._findOne(collectionUsers, {'id': userId});
+		response.results = await this._findOne(correlationId, collectionUsers, {'id': userId});
 		response.success = response.results !== null;
 
 		if (!excludePlan && response && response.success && response.results) {
@@ -33,7 +33,7 @@ class BaseUserMongoRepository extends MongoRepository {
 		const response = this._initResponse(correlationId);
 
 		const collectionUsers = await this._getCollectionUsers(correlationId);
-		response.results = await this._findOne(collectionUsers, { 'external.id': userId });
+		response.results = await this._findOne(correlationId, collectionUsers, { 'external.id': userId });
 		response.success = response.results !== null;
 
 		if (!excludePlan && response && response.success && response.results) {
@@ -51,7 +51,7 @@ class BaseUserMongoRepository extends MongoRepository {
 		user.updatedTimestamp = timestamp;
 
 		const results = await collection.replaceOne({ 'id': id }, user, {upsert: true});
-		if (!this._checkUpdate(results))
+		if (!this._checkUpdate(correlationId, results))
 			return this._error('BaseUserMongoRepository', 'updateFromExternal', 'Invalid user update.', null, null, null, correlationId);
 
 		const response = this._initResponse(correlationId);
@@ -63,11 +63,11 @@ class BaseUserMongoRepository extends MongoRepository {
 		const collection = await this._getCollectionUsers(correlationId);
 
 		const client = await this._getClient(correlationId);
-		const session = await this._transactionInit(client);
+		const session = await this._transactionInit(correlationId, client);
 		try {
-			await this._transactionStart(session);
+			await this._transactionStart(correlationId, session);
 
-			const user = await this._findOne(collection, {'id': id});
+			const user = await this._findOne(correlationId, collection, {'id': id});
 			if (!user)
 				return this._error('BaseUserMongoRepository', 'updatePlan', 'No user found.', null, null, null, correlationId);
 			user.planId = planId;
@@ -75,14 +75,14 @@ class BaseUserMongoRepository extends MongoRepository {
 			const response = this._initResponse(correlationId);
 			response.results = user;
 
-			await this._transactionCommit(session);
+			await this._transactionCommit(correlationId, session);
 			return response;
 		}
 		catch (err) {
 			return this._transactionAbort(correlationId, session, null, err);
 		}
 		finally {
-			await this._transactionEnd(session);
+			await this._transactionEnd(correlationId, session);
 		}
 	}
 
@@ -90,29 +90,29 @@ class BaseUserMongoRepository extends MongoRepository {
 		const collection = await this._getCollectionUsers(correlationId);
 
 		const client = await this._getClient(correlationId);
-		const session = await this._transactionInit(client);
+		const session = await this._transactionInit(correlationId, client);
 		try {
-			await this._transactionStart(session);
+			await this._transactionStart(correlationId, session);
 
-			const data = await this._findOne(collection, { 'id': id });
+			const data = await this._findOne(correlationId, collection, { 'id': id });
 			if (data) {
 				data.settings = settings;
 				data.updatedTimestamp = Utility.getTimestamp();
 				const results = await collection.replaceOne({ 'id': id }, data, { upsert: true });
-				if (!this._checkUpdate(results))
+				if (!this._checkUpdate(correlationId, results))
 					return this._error('BaseUserMongoRepository', 'updateSettings', 'Invalid settings update.', null, null, null, correlationId);
 			}
 			const response = this._initResponse(correlationId);
 			response.results = data;
 
-			await this._transactionCommit(session);
+			await this._transactionCommit(correlationId, session);
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(correlationId, session, null, err);
+			return this._transactionAbort(correlationId, correlationId, session, null, err);
 		}
 		finally {
-			await this._transactionEnd(session);
+			await this._transactionEnd(correlationId, session);
 		}
 	}
 

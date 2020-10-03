@@ -9,22 +9,22 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 		const collection = await this._getCollectionAdmin(correlationId);
 		const client = await this._getClient(correlationId);
-		const session = await this._transactionInit(client);
+		const session = await this._transactionInit(correlationId, client);
 		try {
-			await this._transactionStart(session);
+			await this._transactionStart(correlationId, session);
 
-			const response = await this._create(collection, userId, value);
+			const response = await this._create(correlationId, collection, userId, value);
 			if (!response || !response.success)
 				return this._transactionAbort(correlationId, session, 'Unable to insert the value', null, null, null, correlationId);
 
-			await this._transactionCommit(session);
+			await this._transactionCommit(correlationId, session);
 			return response;
 		}
 		catch (err) {
 			return this._transactionAbort(correlationId, session, null, err);
 		}
 		finally {
-			await this._transactionEnd(session);
+			await this._transactionEnd(correlationId, session);
 		}
 	}
 
@@ -34,14 +34,14 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 		const collection = await this._getCollectionAdmin(correlationId);
 		const response = this._initResponse(correlationId);
-		response.success = await this._deleteOne(collection, { id: id});
+		response.success = await this._deleteOne(correlationId, collection, { id: id});
 		return response;
 	}
 
 	async fetch(correlationId, id) {
 		const collection = await this._getCollectionAdmin(correlationId);
 		const response = this._initResponse(correlationId);
-		response.results = await this._fetch(await this._find(collection, { id: id }));
+		response.results = await this._fetch(correlationId, await this._find(correlationId, collection, { id: id }));
 		response.success = response.results != null;
 		return response;
 	}
@@ -53,10 +53,10 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 		const defaultFilter = { };
 
-		const queryF = this._searchFilter(params, defaultFilter);
+		const queryF = this._searchFilter(correlationId, params, defaultFilter);
 		const queryA = [
 			{
-				$match: this._searchFilter(params, defaultFilter)
+				$match: this._searchFilter(correlationId, params, defaultFilter)
 			}
 		];
 		this._searchQueryAdditional(queryA);
@@ -67,7 +67,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 			$project: this._searchProjection({ '_id': 0 })
 		});
 
-		response.results = await this._aggregateExtract(await this._find(collection, queryF), await this._aggregate(collection, queryA), this._initResponseExtract(correlationId));
+		response.results = await this._aggregateExtract(correlationId, correlationId, await this._find(correlationId, collection, queryF), await this._aggregate(collection, queryA), this._initResponseExtract(correlationId));
 		return response;
 	}
 
@@ -77,22 +77,22 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 		const collection = await this._getCollectionAdmin(correlationid);
 		const client = await this._getClient(correlationId);
-		const session = await this._transactionInit(client);
+		const session = await this._transactionInit(correlationId, client);
 		try {
-			await this._transactionStart(session);
+			await this._transactionStart(correlationId, session);
 
-			const response = await this._update(collection, userId, value.id, value);
+			const response = await this._update(correlationId, collection, userId, value.id, value);
 			if (!response || !response.success)
-				return this._transactionAbort(correlationId, session, 'Unable to update the value');
+				return this._transactionAbort(correlationId, correlationId, session, 'Unable to update the value');
 
-			await this._transactionCommit(session);
+			await this._transactionCommit(correlationId, session);
 			return response;
 		}
 		catch (err) {
 			return this._transactionAbort(correlationId, session, null, err);
 		}
 		finally {
-			await this._transactionEnd(session);
+			await this._transactionEnd(correlationId, session);
 		}
 	}
 
@@ -113,7 +113,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 	}
 
 	// eslint-disable-next-line
-	_searchFilter(params, defaultFilter) {
+	_searchFilter(correlationId, params, defaultFilter) {
 		return defaultFilter
 	}
 
