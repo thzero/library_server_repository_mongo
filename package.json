@@ -1,10 +1,10 @@
 {
   "name": "@thzero/library_server_repository_mongo",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "version_major": 0,
   "version_minor": 9,
-  "version_patch": 7,
-  "version_date": "10/03/2020",
+  "version_patch": 8,
+  "version_date": "10/06/2020",
   "author": "thZero",
   "license": "MIT",
   "repository": {
@@ -23,7 +23,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@thzero/library_server": "^0.9.7",
+    "@thzero/library_server": "^0.9.8",
     "@thzero/library_common": "^0.9.6",
     "mongodb": "^3.6.2"
   },
