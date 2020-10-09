@@ -23,8 +23,8 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@thzero/library_server": "^0.9.8",
-    "@thzero/library_common": "^0.9.6",
+    "@thzero/library_server": "^0.10.0",
+    "@thzero/library_common": "^0.10.0",
     "mongodb": "^3.6.2"
   },
   "devDependencies": {
