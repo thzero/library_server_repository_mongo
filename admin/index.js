@@ -75,7 +75,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 		if (!this._allowsUpdate)
 			return this._error('BaseAdminMongoRepository', 'update', 'Not authorized', null, null, null, correlationId);
 
-		const collection = await this._getCollectionAdmin(correlationid);
+		const collection = await this._getCollectionAdmin(correlationId);
 		const client = await this._getClient(correlationId);
 		const session = await this._transactionInit(correlationId, client);
 		try {
