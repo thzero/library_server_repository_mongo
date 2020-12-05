@@ -45,6 +45,28 @@ class BaseUserMongoRepository extends MongoRepository {
 		return response;
 	}
 
+	async refreshSettings(correlationId, userId) {
+		const collection = await this._getCollectionUsers(correlationId);
+
+		const client = await this._getClient(correlationId);
+		const session = await this._transactionInit(correlationId, client);
+		try {
+			await this._transactionStart(correlationId, session);
+
+			const data = await this._findOne(correlationId, collection, { 'id': userId });
+			response.results = data;
+
+			await this._transactionCommit(correlationId, session);
+			return response;
+		}
+		catch (err) {
+			return this._transactionAbort(correlationId, correlationId, session, null, err);
+		}
+		finally {
+			await this._transactionEnd(correlationId, session);
+		}
+	}
+
 	async updateFromExternal(correlationId, id, user) {
 		const timestamp = Utility.getTimestamp();
 		const collection = await this._getCollectionUsers(correlationId);
