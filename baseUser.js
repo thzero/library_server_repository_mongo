@@ -54,6 +54,8 @@ class BaseUserMongoRepository extends MongoRepository {
 			await this._transactionStart(correlationId, session);
 
 			const data = await this._findOne(correlationId, collection, { 'id': userId });
+
+			const response = this._initResponse(correlationId);
 			response.results = data;
 
 			await this._transactionCommit(correlationId, session);
