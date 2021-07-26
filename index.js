@@ -45,10 +45,10 @@ class MongoRepository extends Repository {
 		if (!results)
 			return false;
 
-		if (!results.result)
+		if (!results.modifiedCount)
 			return false;
 
-		return results.result.ok;
+		return results.modifiedCount;
 	}
 
 	async _count(cursor) {
