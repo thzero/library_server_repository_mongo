@@ -32,7 +32,7 @@ jobs:
     - name: Node Dependencies
       run: |
         npm install --no-package-lock
-    - name: Update Package Version
+    - name: Package Info
       run: |
         cat package.json
     - name: Initialize Node.js ${{ matrix.node-version }}
