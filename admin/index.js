@@ -14,7 +14,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 			await this._transactionStart(correlationId, session);
 
 			const response = await this._create(correlationId, collection, userId, value);
-			if (!response || !response.success)
+			if (this._hasFailed(response))
 				return this._transactionAbort(correlationId, session, 'Unable to insert the value', null, null, null, correlationId);
 
 			await this._transactionCommit(correlationId, session);
@@ -82,7 +82,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 			await this._transactionStart(correlationId, session);
 
 			const response = await this._update(correlationId, collection, userId, value.id, value);
-			if (!response || !response.success)
+			if (this._hasFailed(response))
 				return this._transactionAbort(correlationId, correlationId, session, 'Unable to update the value');
 
 			await this._transactionCommit(correlationId, session);

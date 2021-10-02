@@ -20,9 +20,9 @@ class BaseUserMongoRepository extends MongoRepository {
 		response.results = await this._findOne(correlationId, collectionUsers, {'id': userId});
 		response.success = response.results !== null;
 
-		if (!excludePlan && response && response.success && response.results) {
+		if (!excludePlan && this._hasSucceeded(response) && response.results) {
 			const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId);
-			if (planResponse.success)
+			if (this._hasSucceeded(planResponse))
 				response.results.plan = planResponse.results;
 		}
 
@@ -36,7 +36,7 @@ class BaseUserMongoRepository extends MongoRepository {
 		response.results = await this._findOne(correlationId, collectionUsers, { 'external.id': userId });
 		response.success = response.results !== null;
 
-		if (!excludePlan && response && response.success && response.results) {
+		if (!excludePlan && this._hasSucceeded(response) && response.results) {
 			const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId, {
 				'roles': 0
 			});
