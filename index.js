@@ -43,12 +43,12 @@ class MongoRepository extends Repository {
 
 	_checkUpdate(correlationId, results) {
 		if (!results)
-			return false;
+			return this._error('MongoRepository', '_checkUpdate', 'Invalid results.', null, null, null, correlationId);
 
-		if (!results.modifiedCount)
-			return false;
+		if (results.modifiedCount || results.upsertedCount)
+			return this._success(correlationId);
 
-		return results.modifiedCount;
+		return this._error('MongoRepository', '_checkUpdate', 'Not updated.', null, null, null, correlationId);
 	}
 
 	async _count(cursor) {
@@ -237,8 +237,9 @@ class MongoRepository extends Repository {
 		value.updatedTimestamp = Utility.getTimestamp();
 		value.updatedUserId = userId;
 		const results = await collection.replaceOne({'id': id}, value, {upsert: true});
-		if (!this._checkUpdate(correlationId, results))
-			return this._error('MongoRepository', '_update', 'Invalid update.', null, null, null, correlationId);
+		const responseUpdate = this._checkUpdate(correlationId, results);
+		if (this._hasFailed(responseUpdate))
+			return responseUpdate;
 
 		response.results = value;
 		return response;
