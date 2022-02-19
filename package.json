@@ -28,7 +28,7 @@
     "mongodb": "^4.3.1"
   },
   "devDependencies": {
-    "@thzero/library_cli": "^0.15.2"
+    "@thzero/library_cli": "^0.15"
   },
   "peerDependencies": {
     "@thzero/library_common": "^0.15",
