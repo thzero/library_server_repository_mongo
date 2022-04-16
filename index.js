@@ -34,8 +34,8 @@ class MongoRepository extends Repository {
 		return await collection.aggregate(query);
 	}
 
-	async _aggregateExtract(correlationId, cursor, aggregateCursor, response) {
-		response.total = await cursor.count();
+	async _aggregateExtract(correlationId, count, aggregateCursor, response) {
+		response.total = count;
 		response.data = await aggregateCursor.toArray();
 		response.count = response.data.length;
 		return response;
@@ -51,8 +51,8 @@ class MongoRepository extends Repository {
 		return this._error('MongoRepository', '_checkUpdate', 'Not updated.', null, null, null, correlationId);
 	}
 
-	async _count(cursor) {
-		return await cursor.count();
+	async _count(correlationId, collection, query) {
+		return await collection.countDocuments(query);
 	}
 
 	async _create(correlationId, collection, userId, value) {
@@ -96,7 +96,7 @@ class MongoRepository extends Repository {
 	}
 
 	async _find(correlationId, collection, query, projection) {
-		const options = {}
+		const options = {};
 		projection = projection ? projection : {};
 		if (!projection['_id'])
 			projection['_id'] = 0;
