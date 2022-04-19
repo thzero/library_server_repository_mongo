@@ -88,8 +88,8 @@ class MongoRepository extends Repository {
 		return (results && (results.length > 0) ? results[0] : null);
 	}
 
-	async _fetchExtract(correlationId, cursor, response) {
-		response.total = await cursor.count();
+	async _fetchExtract(correlationId, count, response) {
+		response.total = count;
 		response.data = await cursor.toArray();
 		response.count = response.data.length;
 		return response;
