@@ -1,10 +1,10 @@
 {
   "name": "@thzero/library_server_repository_mongo",
   "type": "module",
-  "version": "0.15.13",
+  "version": "0.15.14",
   "version_major": 0,
   "version_minor": 15,
-  "version_patch": 13,
+  "version_patch": 14,
   "version_date": "04/20/2022",
   "author": "thZero",
   "license": "MIT",
@@ -20,8 +20,7 @@
     "node": ">=12.8.3"
   },
   "scripts": {
-    "cli-update": "./node_modules/.bin/library-cli --updateversion --pi",
-    "cli-update-w": ".\\node_modules\\.bin\\library-cli --updateversion --pi",
+    "cli-update": "library-cli --updateversion --pi",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
