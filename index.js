@@ -88,7 +88,17 @@ class MongoRepository extends Repository {
 		return (results && (results.length > 0) ? results[0] : null);
 	}
 
-	async _fetchExtract(correlationId, count, response) {
+	async _fetchExtract(correlationId, collection, query, response) {
+		const values = await Promise.all([ this._count(correlationId, collection, query), this._find(correlationId, collection, query) ]);
+		if (values) {
+			response.total = values[0];
+			response.data = await values[1].toArray();
+			response.count = response.data.length;
+		}
+		return response;
+	}
+
+	async _fetchExtract2(correlationId, count, cursor, response) {
 		response.total = count;
 		response.data = await cursor.toArray();
 		response.count = response.data.length;
