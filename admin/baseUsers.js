@@ -2,15 +2,15 @@ import BaseAdminMongoRepository from './index';
 
 class BaseUsersMongoRepository extends BaseAdminMongoRepository {
 	get _allowsCreate() {
-		return false
+		return false;
 	}
 
 	get _allowsDelete() {
-		return true
+		return true;
 	}
 
 	get _allowsUpdate() {
-		return true
+		return true;
 	}
 
 	async _getCollectionAdmin(correlationId) {

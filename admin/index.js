@@ -97,15 +97,15 @@ class BaseAdminMongoRepository extends MongoRepository {
 	}
 
 	get _allowsCreate() {
-		return true
+		return true;
 	}
 
 	get _allowsDelete() {
-		return true
+		return true;
 	}
 
 	get _allowsUpdate() {
-		return true
+		return true;
 	}
 
 	async _getCollectionAdmin() {
@@ -114,11 +114,11 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 	// eslint-disable-next-line
 	_searchFilter(correlationId, params, defaultFilter) {
-		return defaultFilter
+		return defaultFilter;
 	}
 
 	_searchProjection(projection) {
-		return projection
+		return projection;
 	}
 
 	// eslint-disable-next-line

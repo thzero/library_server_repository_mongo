@@ -16,7 +16,7 @@ class BaseCollectionsService extends Service {
 			clientName: clientName,
 			databaseName: databaseName,
 			collectionName: collectionName
-		}
+		};
 	}
 }
 
