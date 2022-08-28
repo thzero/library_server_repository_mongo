@@ -1,10 +1,10 @@
-import LibraryConstants from '@thzero/library_server/constants';
+import LibraryConstants from '@thzero/library_server/constants.js';
 
-import Utility from '@thzero/library_common/utility';
+import Utility from '@thzero/library_common/utility/index.js';
 
-import NotImplementedError from '@thzero/library_common/errors/notImplemented';
+import NotImplementedError from '@thzero/library_common/errors/notImplemented.js';
 
-import MongoRepository from './index';
+import MongoRepository from './index.js';
 
 class BaseUserMongoRepository extends MongoRepository {
 	async init(injector) {

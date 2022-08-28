@@ -1,6 +1,6 @@
-import BaseCollectionsService from './index';
+import BaseCollectionsService from './index.js';
 
-import NotImplementedError from '@thzero/library_common/errors/notImplemented';
+import NotImplementedError from '@thzero/library_common/errors/notImplemented.js';
 
 class BaseApiCollectionsService extends BaseCollectionsService {
 	getCollectionUsageMetrics() {

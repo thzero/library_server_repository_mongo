@@ -1,11 +1,11 @@
 import { MongoClient } from 'mongodb';
 import { Mutex as asyncMutex } from 'async-mutex';
 
-import RepositoryConstants from './constants';
+import RepositoryConstants from './constants.js';
 
-import Utility from '@thzero/library_common/utility';
+import Utility from '@thzero/library_common/utility/index.js';
 
-import Repository from '@thzero/library_server/repository/index';
+import Repository from '@thzero/library_server/repository/index.js';
 
 class MongoRepository extends Repository {
 	static _client = {};

@@ -1,4 +1,4 @@
-import MongoRepository from './index';
+import MongoRepository from './index.js';
 
 class NewsMongoRepository extends MongoRepository {
 	async latest(correlationId, timestamp) {

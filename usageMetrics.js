@@ -1,4 +1,4 @@
-import MongoRepository from './index';
+import MongoRepository from './index.js';
 
 class UsageMetricsMongoRepository extends MongoRepository {
 	async register(usageMetrics) {
