@@ -1,4 +1,4 @@
-import MongoRepository from './index';
+import MongoRepository from './index.js';
 
 class PlansMongoRepository extends MongoRepository {
 	async find(correlationId, planId, project) {

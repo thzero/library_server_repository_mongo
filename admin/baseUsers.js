@@ -1,4 +1,4 @@
-import BaseAdminMongoRepository from './index';
+import BaseAdminMongoRepository from './index.js';
 
 class BaseUsersMongoRepository extends BaseAdminMongoRepository {
 	get _allowsCreate() {

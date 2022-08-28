@@ -1,6 +1,6 @@
-import NotImplementedError from '@thzero/library_common/errors/notImplemented';
+import NotImplementedError from '@thzero/library_common/errors/notImplemented.js';
 
-import MongoRepository from '../index';
+import MongoRepository from '../index.js';
 
 class BaseAdminMongoRepository extends MongoRepository {
 	async create(correlationId, userId, value) {

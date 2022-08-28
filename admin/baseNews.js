@@ -1,4 +1,4 @@
-import BaseAdminMongoRepository from './index';
+import BaseAdminMongoRepository from './index.js';
 
 class NewsBaseAdminMongoRepository extends BaseAdminMongoRepository {
 	async _getCollectionAdmin(correlationId) {

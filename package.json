@@ -1,11 +1,11 @@
 {
   "name": "@thzero/library_server_repository_mongo",
   "type": "module",
-  "version": "0.15.17",
+  "version": "0.16.0",
   "version_major": 0,
-  "version_minor": 15,
-  "version_patch": 17,
-  "version_date": "08/09/2022",
+  "version_minor": 16,
+  "version_patch": 0,
+  "version_date": "08/28/2022",
   "author": "thZero",
   "license": "MIT",
   "repository": {
@@ -27,8 +27,8 @@
     "mongodb": "^4.8.1"
   },
   "peerDependencies": {
-    "@thzero/library_common": "^0.15",
-    "@thzero/library_common_service": "^0.15",
-    "@thzero/library_server": "^0.15"
+    "@thzero/library_common": "^0.16",
+    "@thzero/library_common_service": "^0.16",
+    "@thzero/library_server": "^0.16"
   }
 }
