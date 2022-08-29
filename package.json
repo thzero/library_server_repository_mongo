@@ -24,7 +24,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "mongodb": "^4.8.1"
+    "mongodb": "^4.9.0"
   },
   "peerDependencies": {
     "@thzero/library_common": "^0.16",
