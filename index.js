@@ -56,7 +56,7 @@ class MongoRepository extends Repository {
 	}
 
 	async _create(correlationId, collection, userId, value, idName) {
-		idName = String.isNullOrEmpty(idName) ? idName : 'id';
+		idName = !String.isNullOrEmpty(idName) ? idName : 'id';
 		const response = this._initResponse(correlationId);
 
 		value[idName] = value[idName] ? value[idName] : Utility.generateId();
@@ -243,7 +243,7 @@ class MongoRepository extends Repository {
 	}
 
 	async _update(correlationId, collection, userId, id, value, idName) {
-		idName = String.isNullOrEmpty(idName) ? idName : 'id';
+		idName = !String.isNullOrEmpty(idName) ? idName : 'id';
 		const response = this._initResponse(correlationId);
 
 		value.updatedTimestamp = Utility.getTimestamp();
