@@ -56,10 +56,9 @@ class MongoRepository extends Repository {
 	}
 
 	async _create(correlationId, collection, userId, value, idName) {
-		idName = !String.isNullOrEmpty(idName) ? idName : 'id';
 		const response = this._initResponse(correlationId);
 
-		value[idName] = value[idName] ? value[idName] : Utility.generateId();
+		value['id'] = value['id'] ? value['id'] : Utility.generateId();
 		value.createdTimestamp = Utility.getTimestamp();
 		value.createdUserId = userId;
 		value.updatedTimestamp = Utility.getTimestamp();
@@ -243,12 +242,11 @@ class MongoRepository extends Repository {
 	}
 
 	async _update(correlationId, collection, userId, id, value, idName) {
-		idName = !String.isNullOrEmpty(idName) ? idName : 'id';
 		const response = this._initResponse(correlationId);
 
 		value.updatedTimestamp = Utility.getTimestamp();
 		value.updatedUserId = userId;
-		const results = await collection.replaceOne({idName: id}, value, {upsert: true});
+		const results = await collection.replaceOne({id: id}, value, {upsert: true});
 		const responseUpdate = this._checkUpdate(correlationId, results);
 		if (this._hasFailed(responseUpdate))
 			return responseUpdate;
