@@ -9,14 +9,16 @@ import Repository from '@thzero/library_server/repository/index.js';
 
 class MongoRepository extends Repository {
 	static _client = {};
+	static _mutexClient = new asyncMutex();
+	static _mutexDb = new asyncMutex();
 	static _db = {};
 	constructor() {
 		super();
-
+		
 		this._collectionsConfig = null;
 
-		this._mutexClient = new asyncMutex();
-		this._mutexDb = new asyncMutex();
+		// this._mutexClient = new asyncMutex();
+		// this._mutexDb = new asyncMutex();
 	}
 
 	async init(injector) {
@@ -151,7 +153,8 @@ class MongoRepository extends Repository {
 		if (client)
 			return client;
 
-		const release = await this._mutexClient.acquire();
+		// const release = await this._mutexClient.acquire();
+		const release = await MongoRepository._mutexClient.acquire();
 		try {
 			client = MongoRepository._client[clientName];
 			if (client)
@@ -190,7 +193,8 @@ class MongoRepository extends Repository {
 		if (db)
 			return db;
 
-		const release = await this._mutexDb.acquire();
+		// const release = await this._mutexDb.acquire();
+		const release = await MongoRepository._mutexDb.acquire();
 		try {
 			db = MongoRepository._db[databaseName];
 			if (db)
