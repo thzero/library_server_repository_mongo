@@ -1,6 +1,6 @@
-import LibraryConstants from '@thzero/library_server/constants.js';
+import LibraryServerConstants from '@thzero/library_server/constants.js';
 
-import Utility from '@thzero/library_common/utility/index.js';
+import LibraryCommonUtility from '@thzero/library_common/utility/index.js';
 
 import NotImplementedError from '@thzero/library_common/errors/notImplemented.js';
 
@@ -10,7 +10,7 @@ class BaseUserMongoRepository extends MongoRepository {
 	async init(injector) {
 		await super.init(injector);
 
-		this._repositoryPlans = this._injector.getService(LibraryConstants.InjectorKeys.REPOSITORY_PLANS);
+		this._repositoryPlans = this._injector.getService(LibraryServerConstants.InjectorKeys.REPOSITORY_PLANS);
 	}
 
 	async fetch(correlationId, userId, excludePlan) {
@@ -70,7 +70,7 @@ class BaseUserMongoRepository extends MongoRepository {
 	}
 
 	async updateFromExternal(correlationId, id, user) {
-		const timestamp = Utility.getTimestamp();
+		const timestamp = LibraryCommonUtility.getTimestamp();
 		const collection = await this._getCollectionUsers(correlationId);
 		user.updatedTimestamp = timestamp;
 
@@ -95,7 +95,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			if (!user)
 				return this._error('BaseUserMongoRepository', 'updatePlan', 'No user found.', null, null, null, correlationId);
 			user.planId = planId;
-			user.updatedTimestamp = Utility.getTimestamp();
+			user.updatedTimestamp = LibraryCommonUtility.getTimestamp();
 			const response = this._initResponse(correlationId);
 			response.results = user;
 
@@ -121,7 +121,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			const data = await this._findOne(correlationId, collection, { 'id': id });
 			if (data) {
 				data.settings = settings;
-				data.updatedTimestamp = Utility.getTimestamp();
+				data.updatedTimestamp = LibraryCommonUtility.getTimestamp();
 				const results = await collection.replaceOne({ 'id': id }, data, { upsert: true });
 				if (!this._checkUpdate(correlationId, results))
 					return this._error('BaseUserMongoRepository', 'updateSettings', 'Invalid settings update.', null, null, null, correlationId);

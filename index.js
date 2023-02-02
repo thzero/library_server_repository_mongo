@@ -3,7 +3,7 @@ import { Mutex as asyncMutex } from 'async-mutex';
 
 import RepositoryConstants from './constants.js';
 
-import Utility from '@thzero/library_common/utility/index.js';
+import LibraryCommonUtility from '@thzero/library_common/utility/index.js';
 
 import Repository from '@thzero/library_server/repository/index.js';
 
@@ -14,7 +14,7 @@ class MongoRepository extends Repository {
 	static _db = {};
 	constructor() {
 		super();
-		
+
 		this._collectionsConfig = null;
 
 		// this._mutexClient = new asyncMutex();
@@ -60,10 +60,10 @@ class MongoRepository extends Repository {
 	async _create(correlationId, collection, userId, value, idName) {
 		const response = this._initResponse(correlationId);
 
-		value['id'] = value['id'] ? value['id'] : Utility.generateId();
-		value.createdTimestamp = Utility.getTimestamp();
+		value['id'] = value['id'] ? value['id'] : LibraryCommonUtility.generateId();
+		value.createdTimestamp = LibraryCommonUtility.getTimestamp();
 		value.createdUserId = userId;
-		value.updatedTimestamp = Utility.getTimestamp();
+		value.updatedTimestamp = LibraryCommonUtility.getTimestamp();
 		value.updatedUserId = userId;
 		await collection.insertOne(value);
 
@@ -248,7 +248,7 @@ class MongoRepository extends Repository {
 	async _update(correlationId, collection, userId, id, value, idName) {
 		const response = this._initResponse(correlationId);
 
-		value.updatedTimestamp = Utility.getTimestamp();
+		value.updatedTimestamp = LibraryCommonUtility.getTimestamp();
 		value.updatedUserId = userId;
 		const results = await collection.replaceOne({id: id}, value, {upsert: true});
 		const responseUpdate = this._checkUpdate(correlationId, results);
