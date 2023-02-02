@@ -1,7 +1,7 @@
 import { MongoClient } from 'mongodb';
 import { Mutex as asyncMutex } from 'async-mutex';
 
-import RepositoryConstants from './constants.js';
+import LibraryServerRepositoryConstants from './constants.js';
 
 import LibraryCommonUtility from '@thzero/library_common/utility/index.js';
 
@@ -24,7 +24,7 @@ class MongoRepository extends Repository {
 	async init(injector) {
 		await super.init(injector);
 
-		this._collectionsConfig = this._injector.getService(RepositoryConstants.InjectorKeys.SERVICE_REPOSITORY_COLLECTIONS);
+		this._collectionsConfig = this._injector.getService(LibraryServerRepositoryConstants.InjectorKeys.SERVICE_REPOSITORY_COLLECTIONS);
 	}
 
 	async _aggregate(correlationId, collection, query) {
