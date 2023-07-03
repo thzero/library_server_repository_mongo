@@ -219,13 +219,13 @@ class MongoRepository extends Repository {
 		return db;
 	}
 
-	async _transactionAbort(correlationId, session, message, err) {
+	async _transactionAbort(correlationId, session, message, err, clazz, method) {
 		try {
 			await session.abortTransaction();
-			return this._error('MongoRepository', '_transactionAbort', message, err, null, null, correlationId);
+			return this._error(clazz ? clazz : 'MongoRepository', method ? method : '_transactionAbort', message, err, null, null, correlationId);
 		}
 		catch (err2) {
-			return this._error('MongoRepository', '_transactionAbort', message, err2, null, null, correlationId);
+			return this._error('MongoRepository', '_transactionAbort', null, err2, null, null, correlationId);
 		}
 	}
 

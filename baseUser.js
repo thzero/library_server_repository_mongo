@@ -14,35 +14,45 @@ class BaseUserMongoRepository extends MongoRepository {
 	}
 
 	async fetch(correlationId, userId, excludePlan) {
-		const response = this._initResponse(correlationId);
+		try {
+			const response = this._initResponse(correlationId);
 
-		const collectionUsers = await this._getCollectionUsers(correlationId);
-		response.results = await this._findOne(correlationId, collectionUsers, {'id': userId});
-		response.success = response.results !== null;
-
-		if (!excludePlan && this._hasSucceeded(response) && response.results) {
-			const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId);
-			if (this._hasSucceeded(planResponse))
-				response.results.plan = planResponse.results;
+			const collectionUsers = await this._getCollectionUsers(correlationId);
+			response.results = await this._findOne(correlationId, collectionUsers, {'id': userId});
+			response.success = response.results !== null;
+	
+			if (!excludePlan && this._hasSucceeded(response) && response.results) {
+				const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId);
+				if (this._hasSucceeded(planResponse))
+					response.results.plan = planResponse.results;
+			}
+	
+			return response;
 		}
-
-		return response;
+		catch (err) {
+			return this._error('BaseAdminMongoRepository', 'fetch', null, err, null, null, correlationId);
+		}
 	}
 
 	async fetchByExternalId(correlationId, userId, excludePlan) {
-		const response = this._initResponse(correlationId);
+		try {
+			const response = this._initResponse(correlationId);
 
-		const collectionUsers = await this._getCollectionUsers(correlationId);
-		response.results = await this._findOne(correlationId, collectionUsers, { 'external.id': userId });
-		response.success = response.results !== null;
-
-		if (!excludePlan && this._hasSucceeded(response) && response.results) {
-			const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId, {
-				'roles': 0
-			});
+			const collectionUsers = await this._getCollectionUsers(correlationId);
+			response.results = await this._findOne(correlationId, collectionUsers, { 'external.id': userId });
+			response.success = response.results !== null;
+	
+			if (!excludePlan && this._hasSucceeded(response) && response.results) {
+				const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId, {
+					'roles': 0
+				});
+			}
+	
+			return response;
 		}
-
-		return response;
+		catch (err) {
+			return this._error('BaseAdminMongoRepository', 'fetchByExternalId', null, err, null, null, correlationId);
+		}
 	}
 
 	async refreshSettings(correlationId, userId) {
@@ -62,7 +72,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(correlationId, correlationId, session, null, err);
+			return this._transactionAbort(correlationId, correlationId, session, null, err, 'BaseUserMongoRepository', 'refreshSettings');
 		}
 		finally {
 			await this._transactionEnd(correlationId, session);
@@ -70,17 +80,22 @@ class BaseUserMongoRepository extends MongoRepository {
 	}
 
 	async updateFromExternal(correlationId, id, user) {
-		const timestamp = LibraryCommonUtility.getTimestamp();
-		const collection = await this._getCollectionUsers(correlationId);
-		user.updatedTimestamp = timestamp;
-
-		const results = await collection.replaceOne({ 'id': id }, user, {upsert: true});
-		if (!this._checkUpdate(correlationId, results))
-			return this._error('BaseUserMongoRepository', 'updateFromExternal', 'Invalid user update.', null, null, null, correlationId);
-
-		const response = this._initResponse(correlationId);
-		response.results = user;
-		return response;
+		try {
+			const timestamp = LibraryCommonUtility.getTimestamp();
+			const collection = await this._getCollectionUsers(correlationId);
+			user.updatedTimestamp = timestamp;
+	
+			const results = await collection.replaceOne({ 'id': id }, user, {upsert: true});
+			if (!this._checkUpdate(correlationId, results))
+				return this._error('BaseUserMongoRepository', 'updateFromExternal', 'Invalid user update.', null, null, null, correlationId);
+	
+			const response = this._initResponse(correlationId);
+			response.results = user;
+			return response;
+		}
+		catch (err) {
+			return this._error('BaseAdminMongoRepository', 'updateFromExternal', null, err, null, null, correlationId);
+		}
 	}
 
 	async updatePlan(correlationId, id, planId) {
@@ -103,7 +118,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(correlationId, session, null, err);
+			return this._transactionAbort(correlationId, session, null, err, 'BaseUserMongoRepository', 'updatePlan');
 		}
 		finally {
 			await this._transactionEnd(correlationId, session);
@@ -133,7 +148,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(correlationId, correlationId, session, null, err);
+			return this._transactionAbort(correlationId, correlationId, session, null, err, 'BaseUserMongoRepository', 'updateSettings');
 		}
 		finally {
 			await this._transactionEnd(correlationId, session);
