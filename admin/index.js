@@ -79,7 +79,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 				$project: this._searchProjection({ '_id': 0 })
 			});
 	
-			response.results = await this._aggregateExtract(correlationId, this._count(correlationId, collection, queryF), await this._aggregate(correlationId, collection, queryA), this._initResponseExtract(correlationId));
+			response.results = await this._aggregateExtract2(correlationId, collection, queryA, queryA, this._initResponseExtract(correlationId));
 			return response;
 		}
 		catch (err) {
