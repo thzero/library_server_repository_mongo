@@ -36,9 +36,59 @@ class MongoRepository extends Repository {
 		return await collection.aggregate(query);
 	}
 
+	async _aggregate2(correlationId, collection, query) {
+		if (Array.isArray(query)) {
+			query.push({
+				$project: { '_id': 0 }
+			});
+		}
+		return collection.aggregate(query).toArray();
+	}
+
+	async _aggregateCount(correlationId, collection, query) {
+		query.push({
+			$project: { '_id': 1 }
+		});
+		query.push({
+			$count: 'count'
+		});
+		const temp = await collection.aggregate(query).toArray();
+		return (temp[0] ?? {}).count ?? 0;
+	}
+
+	async _aggregateCount2(correlationId, collection, query) {
+		query.push({
+			$project: { '_id': 1 }
+		});
+		query.push({
+			$count: 'count'
+		});
+		const temp = await collection.aggregate(query).toArray();
+		return (temp[0] ?? {}).count ?? 0;
+	}
+
 	async _aggregateExtract(correlationId, count, aggregateCursor, response) {
 		response.total = count;
 		response.data = await aggregateCursor.toArray();
+		response.count = response.data.length;
+		return response;
+	}
+
+	async _aggregateExtract2(correlationId, collection, queryC, queryD, response) {
+		const results = await Promise.all([ 
+			this._aggregateCount2(correlationId, collection, LibraryCommonUtility.cloneDeep(queryC)),
+			this._aggregate2(correlationId, collection, LibraryCommonUtility.cloneDeep(queryD))
+		 ]);
+		response.total = results[0];
+		response.data = results[1];
+		response.count = response.data.length;
+		return response;
+	}
+
+	async _aggregateExtract3(correlationId, countCursor, aggregateCursor, response) {
+		const results = await Promise.all([countCursor.toArray(), aggregateCursor.toArray()]);
+		response.total = (results[0] ?? {}).count ?? 0;
+		response.data = await results[1];
 		response.count = response.data.length;
 		return response;
 	}
@@ -217,6 +267,29 @@ class MongoRepository extends Repository {
 		}
 
 		return db;
+	}
+
+	_searchFilterText(correlationId, query, name, index) {
+		if ('text' !== (this._searchFilterTextType ?? '').toLowerCase())
+			return null;
+
+		return {
+			$search: {
+				"text": {
+				"path": "name",
+				"query": "Polaris"
+				}
+			} 
+		};
+	}
+
+	get _searchFilterTextType() {
+		const clientName = this._initClientName();
+		const search = this._config.get(`db.${clientName}.search`);
+		if (!search)
+			return 'text';
+
+		return search.text;
 	}
 
 	async _transactionAbort(correlationId, session, message, err, clazz, method) {
