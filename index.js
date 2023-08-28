@@ -270,14 +270,18 @@ class MongoRepository extends Repository {
 	}
 
 	_searchFilterText(correlationId, query, name, index) {
+		if (String.isNullOrEmpty(query))
+			return null;
 		if ('text' !== (this._searchFilterTextType ?? '').toLowerCase())
 			return null;
+		
+		name = !String.isNullOrEmpty(name) ? name : 'searchName';
 
 		return {
 			$search: {
-				"text": {
-				"path": "name",
-				"query": "Polaris"
+				'text': {
+					'path': name,
+					'query': query
 				}
 			} 
 		};
