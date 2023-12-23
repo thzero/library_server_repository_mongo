@@ -175,8 +175,8 @@ class MongoRepository extends Repository {
 		return await collection.findOne(query, options);
 	}
 
-	async _getClient(correlationId) {
-		return await this._initializeClient(correlationId, this._initClientName());
+	async _getClient(correlationId, clientName) {
+		return await this._initializeClient(correlationId, clientName ?? this._initClientName());
 	}
 
 	async _getCollection(correlationId, clientName, databaseName, collectionName) {
