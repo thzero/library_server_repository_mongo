@@ -1,6 +1,6 @@
 import LibraryServerConstants from '@thzero/library_server/constants.js';
 
-import LibraryCommonUtility from '@thzero/library_common/utility/index.js';
+import LibraryMomentUtility from '@thzero/library_common/utility/moment.js';
 
 import NotImplementedError from '@thzero/library_common/errors/notImplemented.js';
 
@@ -81,7 +81,7 @@ class BaseUserMongoRepository extends MongoRepository {
 
 	async updateFromExternal(correlationId, id, user) {
 		try {
-			const timestamp = LibraryCommonUtility.getTimestamp();
+			const timestamp = LibraryMomentUtility.getTimestamp();
 			const collection = await this._getCollectionUsers(correlationId);
 			user.updatedTimestamp = timestamp;
 	
@@ -110,7 +110,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			if (!user)
 				return this._error('BaseUserMongoRepository', 'updatePlan', 'No user found.', null, null, null, correlationId);
 			user.planId = planId;
-			user.updatedTimestamp = LibraryCommonUtility.getTimestamp();
+			user.updatedTimestamp = LibraryMomentUtility.getTimestamp();
 			const response = this._initResponse(correlationId);
 			response.results = user;
 
@@ -136,7 +136,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			const data = await this._findOne(correlationId, collection, { 'id': id });
 			if (data) {
 				data.settings = settings;
-				data.updatedTimestamp = LibraryCommonUtility.getTimestamp();
+				data.updatedTimestamp = LibraryMomentUtility.getTimestamp();
 				const results = await collection.replaceOne({ 'id': id }, data, { upsert: true });
 				if (!this._checkUpdate(correlationId, results))
 					return this._error('BaseUserMongoRepository', 'updateSettings', 'Invalid settings update.', null, null, null, correlationId);
