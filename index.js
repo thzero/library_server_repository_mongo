@@ -4,6 +4,7 @@ import { Mutex as asyncMutex } from 'async-mutex';
 import LibraryServerRepositoryConstants from './constants.js';
 
 import LibraryCommonUtility from '@thzero/library_common/utility/index.js';
+import LibraryMomentUtility from '@thzero/library_common/utility/moment.js';
 
 import Repository from '@thzero/library_server/repository/index.js';
 
@@ -111,9 +112,9 @@ class MongoRepository extends Repository {
 		const response = this._initResponse(correlationId);
 
 		value['id'] = value['id'] ? value['id'] : LibraryCommonUtility.generateId();
-		value.createdTimestamp = LibraryCommonUtility.getTimestamp();
+		value.createdTimestamp = LibraryMomentUtility.getTimestamp();
 		value.createdUserId = userId;
-		value.updatedTimestamp = LibraryCommonUtility.getTimestamp();
+		value.updatedTimestamp = LibraryMomentUtility.getTimestamp();
 		value.updatedUserId = userId;
 		await collection.insertOne(value);
 
@@ -325,7 +326,7 @@ class MongoRepository extends Repository {
 	async _update(correlationId, collection, userId, id, value, idName) {
 		const response = this._initResponse(correlationId);
 
-		value.updatedTimestamp = LibraryCommonUtility.getTimestamp();
+		value.updatedTimestamp = LibraryMomentUtility.getTimestamp();
 		value.updatedUserId = userId;
 		const results = await collection.replaceOne({id: id}, value, {upsert: true});
 		const responseUpdate = this._checkUpdate(correlationId, results);
