@@ -45,7 +45,7 @@ class PubSubMongoRepository extends MongoRepository {
 		throw new NotImplementedError();
 	}
 
-	async _listen(correlationId) {
+	async _listen(correlationId, message) {
 		throw new NotImplementedError();
 	}
 }
