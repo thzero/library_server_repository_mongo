@@ -3,9 +3,10 @@ import MongoRepository from './index.js';
 import NotImplementedError from '@thzero/library_common/errors/notImplemented.js';
 
 class PubSubRepository extends MongoRepository {
-	async listen(correlationId) {
+	async listen(correlationId, collection) {
 		try {
-			const collection = await this._getCollectionPubSub(correlationId);
+			if (!collection)
+				collection = await this._getCollectionPubSub(correlationId);
 
 			const changeStream = collection.watch([], { fullDocument: 'updateLookup' });
 			changeStream.on('change', next => {
@@ -19,12 +20,13 @@ class PubSubRepository extends MongoRepository {
 		}
 	}
 
-	async send(correlationId, type) {
+	async send(correlationId, type, collection) {
 		const session = await this._transactionInit(correlationId, await this._getClient(correlationId));
 		try {
 			await this._transactionStart(correlationId, session);
 
-			const collection = await this._getCollectionPubSub(correlationId);
+			if (!collection)
+				collection = await this._getCollectionPubSub(correlationId);
 
 			collection.insertOne({
 				type: type,
