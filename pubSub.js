@@ -2,7 +2,7 @@ import MongoRepository from './index.js';
 
 import NotImplementedError from '@thzero/library_common/errors/notImplemented.js';
 
-class PubSubRepository extends MongoRepository {
+class PubSubMongoRepository extends MongoRepository {
 	async listen(correlationId, collection) {
 		try {
 			if (!collection)
@@ -16,7 +16,7 @@ class PubSubRepository extends MongoRepository {
 			return this._success(correlationId);
 		}
 		catch (err) {
-			return this._error('PubSubRepository', 'listen', null, err, null, null, correlationId);
+			return this._error('PubSubMongoRepository', 'listen', null, err, null, null, correlationId);
 		}
 	}
 
@@ -37,7 +37,7 @@ class PubSubRepository extends MongoRepository {
 			return this._success(correlationId);
 		}
 		catch (err) {
-			return this._error('PubSubRepository', 'send', null, err, null, null, correlationId);
+			return this._error('PubSubMongoRepository', 'send', null, err, null, null, correlationId);
 		}
 	}
 
@@ -50,4 +50,4 @@ class PubSubRepository extends MongoRepository {
 	}
 }
 
-export default PubSubRepository;
+export default PubSubMongoRepository;
