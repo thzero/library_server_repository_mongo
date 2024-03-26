@@ -5,7 +5,7 @@
   "version_major": 0,
   "version_minor": 18,
   "version_patch": 2,
-  "version_date": "02/25/2024",
+  "version_date": "03/26/2024",
   "author": "thZero",
   "license": "MIT",
   "repository": {
@@ -24,7 +24,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "mongodb": "^6.3.0"
+    "mongodb": "^6.5.0"
   },
   "peerDependencies": {
     "@thzero/library_common": "^0.18",
