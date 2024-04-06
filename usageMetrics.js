@@ -8,6 +8,36 @@ class UsageMetricsMongoRepository extends MongoRepository {
 		return this._success(correlationId);
 	}
 
+	async listing(correlationId) {
+		try {
+			const collection = await this._getCollectionMeasurementsUsageMetrics(correlationId);
+	
+			const queryA = [ {
+				_id: {
+				  type: "$metadata.type",
+				  time: {
+					$dateTrunc: {
+					  date: "$timestamp",
+					  unit: "minute",
+					  binSize: 5,
+					},
+				  },
+				},
+				value: {
+				  $last: "$value",
+				},
+			  }
+			];
+
+			let results = await this._aggregate(correlationId, collection, queryA);
+			results = await results.toArray();
+			return this._successResponse(results, correlationId);
+		}
+		catch (err) {
+			return this._error('AppUsageMetricsRepository', 'listing', null, err, null, null, correlationId);
+		}
+	}
+
 	async tag(correlationId, userId, tag) {
 		try {
 			const collection = await this._getCollectionMeasurementsUsageMetrics(correlationId);
