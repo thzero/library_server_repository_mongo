@@ -12,25 +12,33 @@ class UsageMetricsMongoRepository extends MongoRepository {
 		try {
 			const collection = await this._getCollectionMeasurementsUsageMetrics(correlationId);
 	
-			const queryA = [ {
-				_id: {
-				  type: "$metadata.type",
-				  time: {
-					$dateTrunc: {
-					  date: "$timestamp",
-					  unit: "minute",
-					  binSize: 5,
-					},
-				  },
+			const queryA = [
+				{
+					$group: {
+						_id: {
+							type: "$metadata.type",
+							time: {
+								$dateTrunc: {
+									date: "$timestamp",
+									unit: "minute",
+									binSize: 5
+								}
+							}
+						},
+						value: {
+							$count: {}
+						}
+					}
 				},
-				value: {
-				  $last: "$value",
-				},
-			  }
+				{
+					$sort: {
+						value: -1,
+						'_id.type': 1
+					}
+				}
 			];
 
-			let results = await this._aggregate(correlationId, collection, queryA);
-			results = await results.toArray();
+			const results = await collection.aggregate(queryA).toArray();
 			return this._successResponse(results, correlationId);
 		}
 		catch (err) {
