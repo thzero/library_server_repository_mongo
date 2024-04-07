@@ -8,33 +8,55 @@ class UsageMetricsMongoRepository extends MongoRepository {
 		return this._success(correlationId);
 	}
 
-	async listing(correlationId) {
+	async listing(correlationId, params) {
 		try {
 			const collection = await this._getCollectionMeasurementsUsageMetrics(correlationId);
 	
+			const queryMatch = [];
+			const queryGroup = {
+				type: '$metadata.type'
+			};
+			if (params && params.date) {
+				queryMatch.push({
+					$match: { timestamp: { $gte: new Date(params.date) } }
+				});
+				const unit = params.unit ?? 'month';
+				const number = params.number ?? 1;
+				queryGroup.date = {
+					$dateTrunc: {
+						date: '$timestamp',
+						unit: unit,
+						binSize: number
+					}
+				};
+			}
+
+			let querySort = {};
+			if (params &&  params.sort) {
+				let id;
+				for (let item of params.sort) {
+					id = (item.id !== 'value' ? '_id.' : '') + item.id;
+					querySort[id] = item.dir === false ? -1 : 1
+				}
+			}
+			else
+				querySort = {
+					value: -1,
+					'_id.type': 1
+				};
+	
 			const queryA = [
+				...queryMatch,
 				{
 					$group: {
-						_id: {
-							type: "$metadata.type",
-							time: {
-								$dateTrunc: {
-									date: "$timestamp",
-									unit: "minute",
-									binSize: 5
-								}
-							}
-						},
+						_id: queryGroup,
 						value: {
-							$count: {}
+						  $count: {},
 						}
 					}
 				},
 				{
-					$sort: {
-						value: -1,
-						'_id.type': 1
-					}
+					$sort: querySort
 				}
 			];
 
