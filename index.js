@@ -212,10 +212,7 @@ class MongoRepository extends Repository {
 				return client;
 
 			try {
-				client = await MongoClient.connect(this._config.get(`db.${clientName}.connection`), {
-					useNewUrlParser: true,
-					useUnifiedTopology: true
-				});
+				client = await MongoClient.connect(this._config.get(`db.${clientName}.connection`));
 				MongoRepository._client[clientName] = client;
 
 				this._enforceNotNull('MongoRepository', '_initializeClient', 'client', client, correlationId);
