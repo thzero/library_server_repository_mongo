@@ -20,7 +20,7 @@ class PubSubMongoRepository extends MongoRepository {
 		}
 	}
 
-	async send(correlationId, type, collection) {
+	async send(correlationId, type, params, collection) {
 		const session = await this._transactionInit(correlationId, await this._getClient(correlationId));
 		try {
 			await this._transactionStart(correlationId, session);
@@ -30,6 +30,7 @@ class PubSubMongoRepository extends MongoRepository {
 
 			collection.insertOne({
 				type: type,
+				params: params,
 				timestamp: new Date() // has to be a date for the Mongo TTL index to work
 			});
 
