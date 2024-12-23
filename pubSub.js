@@ -10,7 +10,14 @@ class PubSubMongoRepository extends MongoRepository {
 
 			const changeStream = collection.watch([], { fullDocument: 'updateLookup' });
 			changeStream.on('change', next => {
-				this._listen(correlationId, next.fullDocument);
+				try {
+					if (!next.fullDocument)
+						return;
+					this._listen(correlationId, next.fullDocument);
+				}
+				catch (err) {
+					return this._error('PubSubMongoRepository', 'listen.onchange', null, err, null, null, correlationId);
+				}
 			});
 
 			return this._success(correlationId);
