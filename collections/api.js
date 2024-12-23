@@ -1,23 +1,11 @@
-import BaseApiCollectionsService from './baseApi.js';
+import BaseCollectionsService from './index.js';
 
 import NotImplementedError from '@thzero/library_common/errors/notImplemented.js';
 
-class ApiCollectionsService extends BaseApiCollectionsService {
-	getClientName() {
-		return this._config.get('db.default');
-	}
-	
-	getCollectionNews() {
-		throw new NotImplementedError();
-	}
-
-	getCollectionPlans() {
-		throw new NotImplementedError();
-	}
-
-	getCollectionUsers() {
+class BaseApiCollectionsService extends BaseCollectionsService {
+	getCollectionUsageMetrics() {
 		throw new NotImplementedError();
 	}
 }
 
-export default ApiCollectionsService;
+export default BaseApiCollectionsService;
