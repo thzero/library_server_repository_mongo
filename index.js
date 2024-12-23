@@ -198,7 +198,10 @@ class MongoRepository extends Repository {
 	}
 
 	async _initializeClient(correlationId, clientName) {
-		this._enforceNotEmpty('MongoRepository', '_initializeClient', 'clientName', clientName, correlationId);
+		clientName = clientName ? clientName.trim() : null;
+		this._logger.debug('MongoRepository', '_initializeClient', 'clientName', clientName, correlationId);
+		if (String.isNullOrEmpty(clientName))
+			throw Error('Invalid db configuration, clientName missing.');
 
 		let client = MongoRepository._client[clientName];
 		if (client)
@@ -211,29 +214,25 @@ class MongoRepository extends Repository {
 			if (client)
 				return client;
 
-			try {
-				clientName = clientName ? clientName.trim() : null;
-				this._logger.debug('MongoRepository', '_initializeClient', 'clientName', clientName, correlationId);
-				if (String.isNullOrEmpty(clientName))
-					throw Error('Invalid db configuration, clientName missing.');
+			clientName = clientName ? clientName.trim() : null;
+			this._logger.debug('MongoRepository', '_initializeClient', 'clientName', clientName, correlationId);
+			if (String.isNullOrEmpty(clientName))
+				throw Error('Invalid db configuration, clientName missing or it was blank.');
 
-				const configDb = this._config.get('db');
-				if (!configDb)
-					throw Error('Invalid db configuration.');
-				const configDbClient = configDb[clientName];
-				if (!configDbClient)
-					throw Error(`Invalid db configuration, '${clientName}' not found.`);
-				if (String.isNullOrEmpty(configDbClient.connection))
-					throw Error(`Invalid db configuration, connection missing for '${clientName}'.`);
+			const configDb = this._config.get('db');
+			if (!configDb)
+				throw Error('Invalid db configuration.');
+			const configDbClient = configDb[clientName];
+			if (!configDbClient)
+				throw Error(`Invalid db configuration, '${clientName}' not found.`);
+			const connection = configDbClient.connection ? configDbClient.connection.trim() : null;
+			if (String.isNullOrEmpty(connection))
+				throw Error(`Invalid db configuration, connection missing for '${clientName}' or it was blank.`);
 
-				client = await MongoClient.connect(configDbClient.connection);
-				MongoRepository._client[clientName] = client;
+			client = await MongoClient.connect(connection);
+			MongoRepository._client[clientName] = client;
 
-				this._enforceNotNull('MongoRepository', '_initializeClient', 'client', client, correlationId);
-			}
-			catch (err) {
-				throw err;
-			}
+			this._enforceNotNull('MongoRepository', '_initializeClient', 'client', client, correlationId);
 		}
 		finally {
 			release();
