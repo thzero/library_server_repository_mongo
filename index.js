@@ -212,7 +212,21 @@ class MongoRepository extends Repository {
 				return client;
 
 			try {
-				client = await MongoClient.connect(this._config.get(`db.${clientName}.connection`));
+				clientName = clientName ? clientName.trim() : null;
+				this._logger.debug('MongoRepository', '_initializeClient', 'clientName', clientName, correlationId);
+				if (String.isNullOrEmpty(clientName))
+					throw Error('Invalid db configuration, clientName missing.');
+
+				const configDb = this._config.get('db');
+				if (!configDb)
+					throw Error('Invalid db configuration.');
+				const configDbClient = configDb[clientName];
+				if (!configDbClient)
+					throw Error(`Invalid db configuration, '${clientName}' not found.`);
+				if (String.isNullOrEmpty(configDbClient.connection))
+					throw Error(`Invalid db configuration, connection missing for '${clientName}'.`);
+
+				client = await MongoClient.connect(configDbClient.connection);
 				MongoRepository._client[clientName] = client;
 
 				this._enforceNotNull('MongoRepository', '_initializeClient', 'client', client, correlationId);
