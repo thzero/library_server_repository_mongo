@@ -214,11 +214,6 @@ class MongoRepository extends Repository {
 			if (client)
 				return client;
 
-			clientName = clientName ? clientName.trim() : null;
-			this._logger.debug('MongoRepository', '_initializeClient', 'clientName', clientName, correlationId);
-			if (String.isNullOrEmpty(clientName))
-				throw Error('Invalid db configuration, clientName missing or it was blank.');
-
 			const configDb = this._config.get('db');
 			if (!configDb)
 				throw Error('Invalid db configuration.');
