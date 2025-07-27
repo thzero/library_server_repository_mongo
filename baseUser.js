@@ -30,7 +30,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			return response;
 		}
 		catch (err) {
-			return this._error('BaseAdminMongoRepository', 'fetch', null, err, null, null, correlationId);
+			return this._error('BaseUserMongoRepository', 'fetch', null, err, null, null, correlationId);
 		}
 	}
 
@@ -51,7 +51,49 @@ class BaseUserMongoRepository extends MongoRepository {
 			return response;
 		}
 		catch (err) {
-			return this._error('BaseAdminMongoRepository', 'fetchByExternalId', null, err, null, null, correlationId);
+			return this._error('BaseUserMongoRepository', 'fetchByExternalId', null, err, null, null, correlationId);
+		}
+	}
+
+	async fetchByGamerId(correlationId, gamerId, excludePlan) {
+		try {
+			const response = this._initResponse(correlationId);
+
+			const collectionUsers = await this._getCollectionUsers(correlationId);
+			response.results = await this._findOne(correlationId, collectionUsers, { 'gamerId': gamerId });
+			response.success = response.results !== null;
+	
+			if (!excludePlan && this._hasSucceeded(response) && response.results) {
+				const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId, {
+					'roles': 0
+				});
+			}
+	
+			return response;
+		}
+		catch (err) {
+			return this._error('BaseUserMongoRepository', 'fetchByGamerId', null, err, null, null, correlationId);
+		}
+	}
+
+	async fetchByGamerTag(correlationId, gamerTag, excludePlan) {
+		try {
+			const response = this._initResponse(correlationId);
+
+			const collectionUsers = await this._getCollectionUsers(correlationId);
+			response.results = await this._findOne(correlationId, collectionUsers, { 'settings.gamerTag': gamerTag });
+			response.success = response.results !== null;
+	
+			if (!excludePlan && this._hasSucceeded(response) && response.results) {
+				const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId, {
+					'roles': 0
+				});
+			}
+	
+			return response;
+		}
+		catch (err) {
+			return this._error('BaseUserMongoRepository', 'fetchByGamerTag', null, err, null, null, correlationId);
 		}
 	}
 
@@ -94,7 +136,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			return response;
 		}
 		catch (err) {
-			return this._error('BaseAdminMongoRepository', 'updateFromExternal', null, err, null, null, correlationId);
+			return this._error('BaseUserMongoRepository', 'updateFromExternal', null, err, null, null, correlationId);
 		}
 	}
 
