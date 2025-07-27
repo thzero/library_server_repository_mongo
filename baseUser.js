@@ -30,7 +30,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			return response;
 		}
 		catch (err) {
-			return this._error('BaseAdminMongoRepository', 'fetch', null, err, null, null, correlationId);
+			return this._error('BaseUserMongoRepository', 'fetch', null, err, null, null, correlationId);
 		}
 	}
 
@@ -51,7 +51,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			return response;
 		}
 		catch (err) {
-			return this._error('BaseAdminMongoRepository', 'fetchByExternalId', null, err, null, null, correlationId);
+			return this._error('BaseUserMongoRepository', 'fetchByExternalId', null, err, null, null, correlationId);
 		}
 	}
 
@@ -136,7 +136,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			return response;
 		}
 		catch (err) {
-			return this._error('BaseAdminMongoRepository', 'updateFromExternal', null, err, null, null, correlationId);
+			return this._error('BaseUserMongoRepository', 'updateFromExternal', null, err, null, null, correlationId);
 		}
 	}
 
