@@ -81,9 +81,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			const response = this._initResponse(correlationId);
 
 			const collectionUsers = await this._getCollectionUsers(correlationId);
-			response.results = await this._findOne(correlationId, collectionUsers, { 
-				$or: [ { 'settings.gamerTag': gamerTag }, { 'settings.gamerTagUrl': gamerTag } ]
-			});
+			response.results = await this._findOne(correlationId, collectionUsers, { 'settings.gamerTag': gamerTag });
 			response.success = response.results !== null;
 	
 			if (!excludePlan && this._hasSucceeded(response) && response.results) {
