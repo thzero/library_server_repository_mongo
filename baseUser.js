@@ -55,6 +55,48 @@ class BaseUserMongoRepository extends MongoRepository {
 		}
 	}
 
+	async fetchByGamerId(correlationId, gamerId, excludePlan) {
+		try {
+			const response = this._initResponse(correlationId);
+
+			const collectionUsers = await this._getCollectionUsers(correlationId);
+			response.results = await this._findOne(correlationId, collectionUsers, { 'gamerId': gamerId });
+			response.success = response.results !== null;
+	
+			if (!excludePlan && this._hasSucceeded(response) && response.results) {
+				const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId, {
+					'roles': 0
+				});
+			}
+	
+			return response;
+		}
+		catch (err) {
+			return this._error('BaseUserMongoRepository', 'fetchByGamerId', null, err, null, null, correlationId);
+		}
+	}
+
+	async fetchByGamerTag(correlationId, gamerTag, excludePlan) {
+		try {
+			const response = this._initResponse(correlationId);
+
+			const collectionUsers = await this._getCollectionUsers(correlationId);
+			response.results = await this._findOne(correlationId, collectionUsers, { 'settings.gamerTag': gamerTag });
+			response.success = response.results !== null;
+	
+			if (!excludePlan && this._hasSucceeded(response) && response.results) {
+				const planResponse = await this._repositoryPlans.find(correlationId, response.results.planId, {
+					'roles': 0
+				});
+			}
+	
+			return response;
+		}
+		catch (err) {
+			return this._error('BaseUserMongoRepository', 'fetchByGamerTag', null, err, null, null, correlationId);
+		}
+	}
+
 	async refreshSettings(correlationId, userId) {
 		const collection = await this._getCollectionUsers(correlationId);
 
