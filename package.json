@@ -1,11 +1,11 @@
 {
   "name": "@thzero/library_server_repository_mongo",
   "type": "module",
-  "version": "0.18.29",
+  "version": "0.18.30",
   "version_major": 0,
   "version_minor": 18,
-  "version_patch": 29,
-  "version_date": "09/03/2025",
+  "version_patch": 30,
+  "version_date": "10/15/2025",
   "author": "thZero",
   "license": "MIT",
   "repository": {
