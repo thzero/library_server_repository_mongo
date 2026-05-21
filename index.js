@@ -112,9 +112,10 @@ class MongoRepository extends Repository {
 		const response = this._initResponse(correlationId);
 
 		value['id'] = value['id'] ? value['id'] : LibraryCommonUtility.generateId();
-		value.createdTimestamp = LibraryMomentUtility.getTimestamp();
+		const timestamp = LibraryMomentUtility.getTimestamp();
+		value.createdTimestamp = timestamp;
 		value.createdUserId = userId;
-		value.updatedTimestamp = LibraryMomentUtility.getTimestamp();
+		value.updatedTimestamp = timestamp;
 		value.updatedUserId = userId;
 		await collection.insertOne(value);
 
@@ -256,17 +257,12 @@ class MongoRepository extends Repository {
 			if (db)
 				return db;
 
-			try {
-				const client = await this._initializeClient(correlationId, clientName);
-				const databaseName = this._config.get(`db.${clientName}.name`);
-				db = client.db(databaseName);
-				MongoRepository._db[databaseName] = db;
+			const client = await this._initializeClient(correlationId, clientName);
+			const resolvedDbName = this._config.get(`db.${clientName}.name`);
+			db = client.db(resolvedDbName);
+			MongoRepository._db[resolvedDbName] = db;
 
-				this._enforceNotNull('MongoRepository', '_initializeDb', 'db', db, correlationId);
-			}
-			catch (err) {
-				throw err;
-			}
+			this._enforceNotNull('MongoRepository', '_initializeDb', 'db', db, correlationId);
 		}
 		finally {
 			release();
