@@ -1,3 +1,5 @@
+import LibraryCommonUtility from '@thzero/library_common/utility/index.js';
+
 import NotImplementedError from '@thzero/library_common/errors/notImplemented.js';
 
 import MongoRepository from '../index.js';
@@ -5,7 +7,7 @@ import MongoRepository from '../index.js';
 class BaseAdminMongoRepository extends MongoRepository {
 	async create(correlationId, userId, value) {
 		if (!this._allowsCreate)
-			return this._error('BaseAdminMongoRepository', 'create', 'Not authorized');
+			return this._error('BaseAdminMongoRepository', 'create', 'Not authorized', null, null, null, correlationId);
 
 		const client = await this._getClient(correlationId);
 		const session = await this._transactionInit(correlationId, client);
@@ -16,7 +18,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 
 			const response = await this._create(correlationId, collection, userId, value);
 			if (this._hasFailed(response))
-				return this._transactionAbort(correlationId, session, 'Unable to insert the value', null, null, null, correlationId);
+				return this._transactionAbort(correlationId, session, 'Unable to insert the value');
 
 			await this._transactionCommit(correlationId, session);
 			return response;
@@ -49,7 +51,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 			const collection = await this._getCollectionAdmin(correlationId);
 			const response = this._initResponse(correlationId);
 			response.results = await this._fetch(correlationId, await this._find(correlationId, collection, { id: id }));
-			response.success = response.results != null;
+			response.success = LibraryCommonUtility.isNotNull(response.results);
 			return response;
 		}
 		catch (err) {
@@ -68,7 +70,7 @@ class BaseAdminMongoRepository extends MongoRepository {
 			const queryF = this._searchFilter(correlationId, params, defaultFilter);
 			const queryA = [
 				{
-					$match: this._searchFilter(correlationId, params, defaultFilter)
+					$match: queryF
 				}
 			];
 			this._searchQueryAdditional(queryA);
@@ -95,11 +97,11 @@ class BaseAdminMongoRepository extends MongoRepository {
 		try {
 			await this._transactionStart(correlationId, session);
 			
-		const collection = await this._getCollectionAdmin(correlationId);
+			const collection = await this._getCollectionAdmin(correlationId);
 
 			const response = await this._update(correlationId, collection, userId, value.id, value);
 			if (this._hasFailed(response))
-				return this._transactionAbort(correlationId, correlationId, session, 'Unable to update the value');
+				return this._transactionAbort(correlationId, session, 'Unable to update the value');
 
 			await this._transactionCommit(correlationId, session);
 			return response;
