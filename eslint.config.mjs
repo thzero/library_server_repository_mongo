@@ -15,7 +15,9 @@ export default [
 				performance: 'readonly',
 				navigator: 'readonly',
 				setTimeout: 'readonly',
-				clearTimeout: 'readonly'
+				clearTimeout: 'readonly',
+				setInterval: 'readonly',
+				clearInterval: 'readonly'
 			}
 		},
 		rules: {

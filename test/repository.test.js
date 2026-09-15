@@ -269,6 +269,95 @@ describe('_initializeDb', () => {
 	});
 });
 
+describe('_getMongoClientOptions', () => {
+	const newRepository = (config) => {
+		const repo = new MongoRepository();
+		inject(repo, '_logger', newLogger());
+		inject(repo, '_config', newConfig(config));
+		repo._initClientName = () => 'clientA';
+		return repo;
+	};
+
+	// Regression: the client connected with no options at all, so every pool and
+	// timeout setting was whatever happened to be in the connection string.
+	it('applies the built in defaults when nothing is configured', () => {
+		const options = newRepository({ db: {} })._getMongoClientOptions('cid', 'clientA');
+		assert.equal(options.maxIdleTimeMS, 60000, 'idle connections are recycled before a NAT drops them');
+		assert.equal(options.minPoolSize, 5);
+		assert.equal(options.serverSelectionTimeoutMS, 10000);
+		assert.equal(options.connectTimeoutMS, 10000);
+		assert.equal(options.retryWrites, true);
+		assert.equal(options.retryReads, true);
+	});
+
+	// A socketTimeoutMS low enough to be useful also kills change streams.
+	it('leaves the opt-in options unset', () => {
+		const options = newRepository({ db: {} })._getMongoClientOptions('cid', 'clientA');
+		for (const name of [ 'socketTimeoutMS', 'w', 'readPreference', 'appName', 'compressors', 'tls' ])
+			assert.equal(name in options, false, `${name} is left to the connection string`);
+	});
+
+	it('takes db.<option> for every client and db.<client>.<option> for one', () => {
+		const repo = newRepository({ db: { maxIdleTimeMS: 30000, clientB: { maxIdleTimeMS: 5000, w: 'majority' } } });
+		assert.equal(repo._getMongoClientOptions('cid', 'clientA').maxIdleTimeMS, 30000);
+		assert.equal(repo._getMongoClientOptions('cid', 'clientB').maxIdleTimeMS, 5000, 'per client wins');
+		assert.equal(repo._getMongoClientOptions('cid', 'clientB').w, 'majority');
+		assert.equal('w' in repo._getMongoClientOptions('cid', 'clientA'), false, 'and does not leak to the others');
+	});
+
+	// Regression: Number(null) is 0, so an absent key read as a deliberate zero and
+	// silently beat the default.
+	it('does not read an absent key as zero', () => {
+		const options = newRepository({ db: { maxIdleTimeMS: null, minPoolSize: '' } })._getMongoClientOptions('cid', 'clientA');
+		assert.equal(options.maxIdleTimeMS, 60000);
+		assert.equal(options.minPoolSize, 5);
+	});
+
+	it('honours a configured zero', () => {
+		assert.equal(newRepository({ db: { minPoolSize: 0 } })._getMongoClientOptions('cid', 'clientA').minPoolSize, 0);
+	});
+
+	// Environment variables arrive as strings.
+	it('coerces strings from the environment', () => {
+		const options = newRepository({ db: { maxIdleTimeMS: '30000', retryWrites: 'false', compressors: 'zstd, snappy', w: '1' } })._getMongoClientOptions('cid', 'clientA');
+		assert.equal(options.maxIdleTimeMS, 30000);
+		assert.equal(options.retryWrites, false);
+		assert.deepEqual(options.compressors, [ 'zstd', 'snappy' ]);
+		assert.equal(options.w, 1);
+	});
+
+	it('discards a value it cannot coerce', () => {
+		const options = newRepository({ db: { maxIdleTimeMS: 'soon', minPoolSize: -1 } })._getMongoClientOptions('cid', 'clientA');
+		assert.equal(options.maxIdleTimeMS, 60000);
+		assert.equal(options.minPoolSize, 5);
+	});
+});
+
+describe('_getCollectionFromConfig', () => {
+	const newRepository = () => {
+		const repo = new MongoRepository();
+		inject(repo, '_logger', newLogger());
+		inject(repo, '_config', newConfig({ db: { name: 'global' } }));
+		repo._initializeDb = async () => ({ collection: (name, options) => ({ name, options }) });
+		return repo;
+	};
+
+	const config = { clientName: 'clientA', databaseName: 'db', collectionName: 'things' };
+
+	// A change stream only surfaces majority committed writes, so a pub/sub style
+	// collection needs its own write concern.
+	it('passes per collection options through to the driver', async () => {
+		const collection = await newRepository()._getCollectionFromConfig('cid', config, { writeConcern: { w: 'majority' } });
+		assert.deepEqual(collection.options, { writeConcern: { w: 'majority' } });
+	});
+
+	it('asks for the collection unqualified when there are no options', async () => {
+		const collection = await newRepository()._getCollectionFromConfig('cid', config);
+		assert.equal(collection.options, undefined);
+		assert.equal(collection.name, 'things');
+	});
+});
+
 describe('_searchFilterText', () => {
 	it('returns null for an empty query', () => {
 		assert.equal(repository._searchFilterText('cid', '', 'name'), null);
