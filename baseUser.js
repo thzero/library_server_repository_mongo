@@ -120,7 +120,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(correlationId, correlationId, session, null, err, 'BaseUserMongoRepository', 'refreshSettings');
+			return this._transactionAbort(correlationId, session, null, err, 'BaseUserMongoRepository', 'refreshSettings');
 		}
 		finally {
 			await this._transactionEnd(correlationId, session);
@@ -132,9 +132,18 @@ class BaseUserMongoRepository extends MongoRepository {
 			const timestamp = LibraryMomentUtility.getTimestamp();
 			const collection = await this._getCollectionUsers(correlationId);
 			user.updatedTimestamp = timestamp;
-	
+			// This path is a deliberate create-or-update, so the upsert stays. But
+			// replaceOne writes the whole document: without these the created fields
+			// were never set on insert and were erased on update.
+			if (!user.createdTimestamp)
+				user.createdTimestamp = timestamp;
+			if (!user.createdUserId)
+				user.createdUserId = user.id ?? id;
+
 			const results = await collection.replaceOne({ 'id': id }, user, {upsert: true});
-			if (!this._checkUpdate(correlationId, results))
+			// _checkUpdate returns a Response, which is always truthy; test it with _hasFailed.
+			const responseUpdate = this._checkUpdate(correlationId, results);
+			if (this._hasFailed(responseUpdate))
 				return this._error('BaseUserMongoRepository', 'updateFromExternal', 'Invalid user update.', null, null, null, correlationId);
 	
 			const response = this._initResponse(correlationId);
@@ -186,7 +195,9 @@ class BaseUserMongoRepository extends MongoRepository {
 				data.settings = settings;
 				data.updatedTimestamp = LibraryMomentUtility.getTimestamp();
 				const results = await collection.replaceOne({ 'id': id }, data, { upsert: true });
-				if (!this._checkUpdate(correlationId, results))
+				// _checkUpdate returns a Response, which is always truthy; test it with _hasFailed.
+				const responseUpdate = this._checkUpdate(correlationId, results);
+				if (this._hasFailed(responseUpdate))
 					return this._error('BaseUserMongoRepository', 'updateSettings', 'Invalid settings update.', null, null, null, correlationId);
 			}
 			const response = this._initResponse(correlationId);
@@ -196,7 +207,7 @@ class BaseUserMongoRepository extends MongoRepository {
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(correlationId, correlationId, session, null, err, 'BaseUserMongoRepository', 'updateSettings');
+			return this._transactionAbort(correlationId, session, null, err, 'BaseUserMongoRepository', 'updateSettings');
 		}
 		finally {
 			await this._transactionEnd(correlationId, session);

@@ -29,42 +29,27 @@ class MongoRepository extends Repository {
 	}
 
 	async _aggregate(correlationId, collection, query) {
-		if (Array.isArray(query)) {
-			query.push({
-				$project: { '_id': 0 }
-			});
-		}
-		return await collection.aggregate(query);
+		// Build a new pipeline rather than pushing onto the caller's array. Mutating
+		// it meant a reused query accumulated a $project stage per call, which is why
+		// _aggregateExtract2 had to cloneDeep both queries before calling in.
+		const pipeline = Array.isArray(query) ? [ ...query, { $project: { '_id': 0 } } ] : query;
+		return await collection.aggregate(pipeline);
 	}
 
 	async _aggregate2(correlationId, collection, query) {
-		if (Array.isArray(query)) {
-			query.push({
-				$project: { '_id': 0 }
-			});
-		}
-		return collection.aggregate(query).toArray();
+		const pipeline = Array.isArray(query) ? [ ...query, { $project: { '_id': 0 } } ] : query;
+		return collection.aggregate(pipeline).toArray();
 	}
 
 	async _aggregateCount(correlationId, collection, query) {
-		query.push({
-			$project: { '_id': 1 }
-		});
-		query.push({
-			$count: 'count'
-		});
-		const temp = await collection.aggregate(query).toArray();
+		const pipeline = [ ...query, { $project: { '_id': 1 } }, { $count: 'count' } ];
+		const temp = await collection.aggregate(pipeline).toArray();
 		return (temp[0] ?? {}).count ?? 0;
 	}
 
 	async _aggregateCount2(correlationId, collection, query) {
-		query.push({
-			$project: { '_id': 1 }
-		});
-		query.push({
-			$count: 'count'
-		});
-		const temp = await collection.aggregate(query).toArray();
+		const pipeline = [ ...query, { $project: { '_id': 1 } }, { $count: 'count' } ];
+		const temp = await collection.aggregate(pipeline).toArray();
 		return (temp[0] ?? {}).count ?? 0;
 	}
 
@@ -77,8 +62,8 @@ class MongoRepository extends Repository {
 
 	async _aggregateExtract2(correlationId, collection, queryC, queryD, response) {
 		const results = await Promise.all([ 
-			this._aggregateCount2(correlationId, collection, LibraryCommonUtility.cloneDeep(queryC)),
-			this._aggregate2(correlationId, collection, LibraryCommonUtility.cloneDeep(queryD))
+			this._aggregateCount2(correlationId, collection, queryC),
+			this._aggregate2(correlationId, collection, queryD)
 		 ]);
 		response.total = results[0];
 		response.data = results[1];
@@ -181,18 +166,17 @@ class MongoRepository extends Repository {
 		return await this._initializeClient(correlationId, clientName ?? this._initClientName());
 	}
 
-	async _getCollection(correlationId, clientName, databaseName, collectionName) {
-		this._enforceNotEmpty('MongoRepository', '_getCollection', 'collectionName', collectionName, correlationId);
+	async _getCollection(correlationId, clientName, collectionName, databaseName) {
+		this._enforceNotEmpty('MongoRepository', '_getCollection', collectionName, 'collectionName', correlationId);
 
 		const db = await this._initializeDb(correlationId, clientName, databaseName);
 		return await db.collection(collectionName);
 	}
 
 	async _getCollectionFromConfig(correlationId, config) {
-		this._enforceNotNull('MongoRepository', '_getCollectionFromConfig', 'config', config, correlationId);
-		this._enforceNotEmpty('MongoRepository', '_getCollectionFromConfig', 'config.clientName', config.clientName, correlationId);
-		this._enforceNotEmpty('MongoRepository', '_getCollectionFromConfig', 'config.databaseName', config.databaseName, correlationId);
-		this._enforceNotEmpty('MongoRepository', '_getCollectionFromConfig', 'config.collectionName', config.collectionName, correlationId);
+		this._enforceNotNull('MongoRepository', '_getCollectionFromConfig', config, 'config', correlationId);
+		this._enforceNotEmpty('MongoRepository', '_getCollectionFromConfig', config.clientName, 'config.clientName', correlationId);
+		this._enforceNotEmpty('MongoRepository', '_getCollectionFromConfig', config.collectionName, 'config.collectionName', correlationId);
 
 		const db = await this._initializeDb(correlationId, config.clientName, config.databaseName);
 		return await db.collection(config.collectionName);
@@ -228,7 +212,7 @@ class MongoRepository extends Repository {
 			client = await MongoClient.connect(connection);
 			MongoRepository._client[clientName] = client;
 
-			this._enforceNotNull('MongoRepository', '_initializeClient', 'client', client, correlationId);
+			this._enforceNotNull('MongoRepository', '_initializeClient', client, 'client', correlationId);
 		}
 		finally {
 			release();
@@ -242,27 +226,37 @@ class MongoRepository extends Repository {
 	}
 
 	async _initializeDb(correlationId, clientName, databaseName) {
+		// databaseName is an override: a caller-supplied name wins, otherwise fall
+		// back to config. It previously had no effect at all - it was defaulted,
+		// validated and used as a cache key, but client.db() was always handed the
+		// config value instead.
 		if (String.isNullOrEmpty(databaseName))
-			databaseName = this._config.get('db.name');
-		this._enforceNotEmpty('MongoRepository', '_initializeDb', 'databaseName', databaseName, correlationId);
+			databaseName = this._config.get(`db.${clientName}.name`, null);
+		if (String.isNullOrEmpty(databaseName))
+			databaseName = this._config.get('db.name', null);
+		this._enforceNotEmpty('MongoRepository', '_initializeDb', databaseName, 'databaseName', correlationId);
 
-		let db = MongoRepository._db[databaseName];
+		// Key on client AND database. The same database name under two clients is
+		// two different handles, and the read and write must use the same key -
+		// they did not, so the cache never hit and every call built a new handle.
+		const key = `${clientName}/${databaseName}`;
+
+		let db = MongoRepository._db[key];
 		if (db)
 			return db;
 
 		// const release = await this._mutexDb.acquire();
 		const release = await MongoRepository._mutexDb.acquire();
 		try {
-			db = MongoRepository._db[databaseName];
+			db = MongoRepository._db[key];
 			if (db)
 				return db;
 
 			const client = await this._initializeClient(correlationId, clientName);
-			const resolvedDbName = this._config.get(`db.${clientName}.name`);
-			db = client.db(resolvedDbName);
-			MongoRepository._db[resolvedDbName] = db;
+			db = client.db(databaseName);
+			MongoRepository._db[key] = db;
 
-			this._enforceNotNull('MongoRepository', '_initializeDb', 'db', db, correlationId);
+			this._enforceNotNull('MongoRepository', '_initializeDb', db, 'db', correlationId);
 		}
 		finally {
 			release();
@@ -329,7 +323,7 @@ class MongoRepository extends Repository {
 
 		value.updatedTimestamp = LibraryMomentUtility.getTimestamp();
 		value.updatedUserId = userId;
-		const results = await collection.replaceOne({id: id}, value, {upsert: true});
+		const results = await collection.replaceOne({id: id}, value, {upsert: false});
 		const responseUpdate = this._checkUpdate(correlationId, results);
 		if (this._hasFailed(responseUpdate))
 			return responseUpdate;
