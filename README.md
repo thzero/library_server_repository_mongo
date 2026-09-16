@@ -110,13 +110,32 @@ Register it under `SERVICE_REPOSITORY_COLLECTIONS` from `library_server_reposito
 
 ## Pub/sub
 
-`PubSubMongoRepository` watches a collection's change stream and hands each inserted document to `_listen`. Implement three members:
+`PubSubMongoRepository` watches a collection's change stream and hands each inserted document to `_listen`. Implement one member:
 
 | Member | Purpose |
 |---|---|
-| `_getCollectionPubSub(correlationId)` | The collection to watch. Pass `{ writeConcern: { w: 'majority' } }` to `_getCollectionFromConfig` — a change stream only ever surfaces majority committed writes, so at the default `w: 1` a `send` can report success for an insert a later election rolls back, and that message is never delivered. |
-| `_getConfigPubSub(correlationId)` | The collection config, so the retry and any client reset act on the client that owns the collection. Returning `null` falls back to the default client. |
 | `_listen(correlationId, message)` | Called with `fullDocument` for each change. |
+
+Everything else resolves itself. The collection comes from the collections service's `getCollectionPubSub`, and it is opened with `{ writeConcern: { w: 'majority' } }` — a change stream only ever surfaces majority committed writes, so at the default `w: 1` a `send` can report success for an insert a later election rolls back, and that message is never delivered. That is a property of change streams rather than of any one application, so it is not left to each implementation to remember.
+
+### Lifecycle
+
+Register the repository and it runs itself — there is no boot hook to write:
+
+| Hook | What happens |
+|---|---|
+| `initPost()` | Opens the change stream, as part of the boot's post-init sweep. Set `db.pubSubListen` false for a deployment that publishes but should not also consume, so it does not pay for a stream it never reads. |
+| `cleanup(correlationId)` | Closes the stream and stops the reconnect timer and watchdog, as part of the boot's cleanup sweep. Without it those keep bringing the stream back while the process is trying to exit. |
+
+`shutdown(correlationId)` remains as the explicit form, for a host that wants to stop pub/sub on its own terms rather than at shutdown.
+
+Three optional overrides, in the order you are likely to want them:
+
+| Member | Purpose |
+|---|---|
+| `_getCollectionPubSubOptions(correlationId)` | The collection options. Rarely needed — the write concern is already configurable as `db.<clientName>.pubSubWriteConcern` for one client or `db.pubSubWriteConcern` for every client. |
+| `_getConfigPubSub(correlationId)` | The collection config, so the retry and any client reset act on the client that owns the collection. Defaults to `this._collectionsConfig.getCollectionPubSub(correlationId)`. |
+| `_getCollectionPubSub(correlationId)` | The collection itself. Only for a collection the config cannot reach; overriding it takes the write concern into your hands. |
 
 `send(correlationId, type, params, collection)` inserts `{ type, params, timestamp }`. `timestamp` is a `Date` so a Mongo TTL index can expire it.
 
