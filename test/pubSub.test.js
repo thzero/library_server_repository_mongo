@@ -270,3 +270,112 @@ describe('send', () => {
 		assert.equal(sessions, 0);
 	});
 });
+
+// The write concern is a correctness requirement of the change stream, not a
+// per-application detail: it used to live in a comment on an abstract method and
+// every implementation had to remember to pass it.
+describe('_getCollectionPubSub', () => {
+	// Resolves the collection itself, from the collections service, rather than
+	// throwing NotImplementedError and making each application wire it up.
+	const newBareRepository = (tree = { db: { name: 'test' } }) => {
+		const repo = new PubSubMongoRepository();
+		inject(repo, '_logger', newLogger());
+		inject(repo, '_config', newConfig(tree));
+		repo._collectionsConfig = {
+			getClientName: () => 'clientA',
+			getCollectionPubSub: () => ({ clientName: 'clientA', databaseName: 'test', collectionName: 'pubsub' })
+		};
+		return repo;
+	};
+
+	const captureOptions = (repo) => {
+		const seen = {};
+		repo._getCollectionFromConfig = async (correlationId, config, options) => {
+			seen.config = config;
+			seen.options = options;
+			return newCollection();
+		};
+		return seen;
+	};
+
+	it('defaults the write concern to majority', async () => {
+		const repo = newBareRepository();
+		const seen = captureOptions(repo);
+		await repo._getCollectionPubSub('cid');
+		assert.deepEqual(seen.options, { writeConcern: { w: 'majority' } });
+	});
+
+	it('resolves the collection from the collections service', async () => {
+		const repo = newBareRepository();
+		const seen = captureOptions(repo);
+		await repo._getCollectionPubSub('cid');
+		assert.equal(seen.config.collectionName, 'pubsub');
+		assert.equal(seen.config.clientName, 'clientA');
+	});
+
+	it('takes db.pubSubWriteConcern for every client', async () => {
+		const repo = newBareRepository({ db: { name: 'test', pubSubWriteConcern: 2 } });
+		const seen = captureOptions(repo);
+		await repo._getCollectionPubSub('cid');
+		assert.deepEqual(seen.options, { writeConcern: { w: 2 } });
+	});
+
+	it('lets db.<client>.pubSubWriteConcern win for one', async () => {
+		const repo = newBareRepository({ db: { name: 'test', pubSubWriteConcern: 2, clientA: { pubSubWriteConcern: 'majority' } } });
+		const seen = captureOptions(repo);
+		await repo._getCollectionPubSub('cid');
+		assert.deepEqual(seen.options, { writeConcern: { w: 'majority' } });
+	});
+
+	it('still throws when there is no collections service to resolve from', async () => {
+		const repo = new PubSubMongoRepository();
+		inject(repo, '_logger', newLogger());
+		inject(repo, '_config', newConfig({ db: { name: 'test' } }));
+		await assert.rejects(() => repo._getCollectionPubSub('cid'));
+	});
+});
+
+// The mirror of the cleanup sweep: an application that registers a pub/sub
+// repository wants to be listening, and should not have to start it by hand.
+describe('initPost', () => {
+	const newListenable = (tree = { db: { name: 'test' } }) => {
+		const collection = newCollection();
+		const repo = newRepository(collection);
+		inject(repo, '_config', newConfig(tree));
+		return { repo, collection };
+	};
+
+	it('opens the change stream', async () => {
+		const { repo, collection } = newListenable();
+		await repo.initPost();
+		assert.equal(collection.streams.length, 1);
+	});
+
+	it('does not open one when db.pubSubListen is false', async () => {
+		const { repo, collection } = newListenable({ db: { name: 'test', pubSubListen: false } });
+		await repo.initPost();
+		assert.equal(collection.streams.length, 0);
+	});
+
+	it('treats the string form from the environment as false', async () => {
+		const { repo, collection } = newListenable({ db: { name: 'test', pubSubListen: 'false' } });
+		await repo.initPost();
+		assert.equal(collection.streams.length, 0);
+	});
+
+	it('opens one when the setting is absent', async () => {
+		const { repo, collection } = newListenable({ db: { name: 'test' } });
+		await repo.initPost();
+		assert.equal(collection.streams.length, 1);
+	});
+
+	// initPost is awaited in a Promise.all over every registered repository, so a
+	// pub/sub that cannot reach Mongo must not take the boot down with it.
+	it('does not throw when the stream cannot be opened', async () => {
+		const { repo } = newListenable();
+		repo._getCollectionPubSub = async () => { throw new Error('unreachable'); };
+		repo._restartDelayMs = 100000;
+		await repo.initPost();
+		await repo.shutdown('cid');
+	});
+});

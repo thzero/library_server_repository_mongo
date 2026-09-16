@@ -42,13 +42,15 @@ The base every other repository here extends. Connection and database handles ar
 
 | Group | Members |
 |---|---|
-| Connection | `_getClient`, `_initializeClient`, `_initializeDb`, `_initClientName` |
-| Collections | `_getCollection(correlationId, clientName, collectionName, databaseName)`, `_getCollectionFromConfig(correlationId, config)` |
+| Connection | `_getClient`, `_initializeClient`, `_initializeDb`, `_initClientName`, `_getMongoClientOptions` |
+| Collections | `_getCollection(correlationId, clientName, collectionName, databaseName, options)`, `_getCollectionFromConfig(correlationId, config, options)` |
 | Read | `_find`, `_findOne`, `_fetch`, `_count`, `_fetchExtract`, `_fetchExtract2` |
 | Aggregate | `_aggregate`, `_aggregate2`, `_aggregateCount`, `_aggregateCount2`, `_aggregateExtract`, `_aggregateExtract2`, `_aggregateExtract3` |
 | Write | `_create`, `_update`, `_delete`, `_deleteOne`, `_checkUpdate` |
 | Transactions | `_transactionInit`, `_transactionStart`, `_transactionCommit`, `_transactionAbort`, `_transactionEnd` |
 | Search | `_searchFilterText`, `_searchFilterTextType` |
+| Resilience | `_withMongoReconnect`, `_resetMongoConnection`, `_isMongoConnectivityError`, `_isMongoServerSelectionError`, `_shouldResetMongoClient` |
+| Config | `_configGetOptional`, `_configGetCoerced` |
 
 Behaviour worth knowing:
 
@@ -57,6 +59,26 @@ Behaviour worth knowing:
 * `_create` stamps `createdTimestamp`, `createdUserId`, `updatedTimestamp` and `updatedUserId` from a single clock reading, and generates an `id` only when one was not supplied.
 * `_update` uses `replaceOne` with `upsert: false` — it updates, it never silently creates.
 * `_checkUpdate` returns a `Response`, which is always truthy. Test it with `_hasFailed`, never with `if (!...)`.
+* Both collection helpers take an optional trailing `options`, passed straight to the driver's `db.collection()` — per collection `writeConcern` / `readConcern`.
+
+### Connection resilience
+
+Wrap an operation in `_withMongoReconnect(correlationId, clientName, databaseName, operation)` and a connectivity failure is retried instead of surfacing:
+
+```js
+return await this._withMongoReconnect(correlationId, config?.clientName, config?.databaseName, async () => {
+    // Re-resolve the collection per attempt - a handle cached across a retry
+    // still points at the client that was just recycled.
+    const collection = await this._getCollectionFromConfig(correlationId, config);
+    return await collection.insertOne(document);
+});
+```
+
+* Only connectivity errors are retried — network and server-selection errors, `timed out`, and the `ResetPool` / `InterruptInUseConnections` error labels, including through an error's `cause` chain. Everything else is rethrown untouched on the first attempt.
+* Retries back off exponentially from `reconnectDelayMs`, capped at `reconnectMaxDelayMs`, up to `reconnectRetries` times.
+* The shared client is only torn down and rebuilt when the topology itself is unreachable (a server-selection error), or from the second attempt onward. For a pool reset the driver recovers on its own, and recreating the client would kill healthy cursors — change streams especially — for nothing.
+* A reset is serialized per client/database behind a mutex and generation counter, so concurrent failures rebuild the client once rather than each racing to replace it, and is rate limited by `reconnectResetCooldownMs`.
+* The operation must let errors escape. Catching inside it hides the connectivity error from the retry and defeats it entirely.
 
 ### Entity repositories
 
@@ -66,7 +88,7 @@ Behaviour worth knowing:
 | `plans.js` | `PlansMongoRepository` | Plans — `find`, `listing` |
 | `news.js` | `NewsMongoRepository` | News — `latest` |
 | `usageMetrics.js` | `UsageMetricsMongoRepository` | Usage metrics — `register`, `listing`, `tag` |
-| `pubSub.js` | `PubSubMongoRepository` | A change-stream based `listen` / `send` |
+| `pubSub.js` | `PubSubMongoRepository` | A change-stream based `listen` / `send` / `shutdown` — see [Pub/sub](#pubsub) |
 | `admin/index.js` | `BaseAdminMongoRepository` | Admin CRUD — `create`, `delete`, `fetch`, `search`, `update`, each in a transaction. Gate them by overriding `_allowsCreate`, `_allowsDelete`, `_allowsUpdate`. |
 | `admin/baseNews.js`, `admin/baseUsers.js` | | Admin repositories for news and users |
 
@@ -85,6 +107,57 @@ class AppCollectionsService extends UserApiCollectionsService {
 ```
 
 Register it under `SERVICE_REPOSITORY_COLLECTIONS` from `library_server_repository_mongo/constants.js`.
+
+## Pub/sub
+
+`PubSubMongoRepository` watches a collection's change stream and hands each inserted document to `_listen`. Implement one member:
+
+| Member | Purpose |
+|---|---|
+| `_listen(correlationId, message)` | Called with `fullDocument` for each change. |
+
+Everything else resolves itself. The collection comes from the collections service's `getCollectionPubSub`, and it is opened with `{ writeConcern: { w: 'majority' } }` — a change stream only ever surfaces majority committed writes, so at the default `w: 1` a `send` can report success for an insert a later election rolls back, and that message is never delivered. That is a property of change streams rather than of any one application, so it is not left to each implementation to remember.
+
+### Lifecycle
+
+Register the repository and it runs itself — there is no boot hook to write:
+
+| Hook | What happens |
+|---|---|
+| `initPost()` | Opens the change stream, as part of the boot's post-init sweep. Set `db.pubSubListen` false for a deployment that publishes but should not also consume, so it does not pay for a stream it never reads. |
+| `cleanup(correlationId)` | Closes the stream and stops the reconnect timer and watchdog, as part of the boot's cleanup sweep. Without it those keep bringing the stream back while the process is trying to exit. |
+
+`shutdown(correlationId)` remains as the explicit form, for a host that wants to stop pub/sub on its own terms rather than at shutdown.
+
+Three optional overrides, in the order you are likely to want them:
+
+| Member | Purpose |
+|---|---|
+| `_getCollectionPubSubOptions(correlationId)` | The collection options. Rarely needed — the write concern is already configurable as `db.<clientName>.pubSubWriteConcern` for one client or `db.pubSubWriteConcern` for every client. |
+| `_getConfigPubSub(correlationId)` | The collection config, so the retry and any client reset act on the client that owns the collection. Defaults to `this._collectionsConfig.getCollectionPubSub(correlationId)`. |
+| `_getCollectionPubSub(correlationId)` | The collection itself. Only for a collection the config cannot reach; overriding it takes the write concern into your hands. |
+
+`send(correlationId, type, params, collection)` inserts `{ type, params, timestamp }`. `timestamp` is a `Date` so a Mongo TTL index can expire it.
+
+### Staying connected
+
+A change stream is not forever — a primary stepdown, a dropped connection or a client close all end it, and the driver only resumes what it deems a resumable error. Everything else used to leave the stream dead in silence, with pub/sub simply stopping. Now:
+
+* **Resume tokens.** A reconnect continues from the last token, so nothing published during an outage is lost. Tokens advance on every batch, including empty ones, so an idle stream still moves its resume point forward.
+* **Reconnect.** `error`, `close` and `end` all schedule one reconnect, backing off exponentially from 3s to a 60s ceiling with jitter so a fleet does not reconnect in lockstep. A generation counter discards events from a stream that has already been replaced.
+* **Lost history.** If the resume token has aged out of the oplog (`ChangeStreamHistoryLost`, codes 286 / 280) it is dropped and the stream restarts from now, rather than retrying a resume that can never succeed.
+* **Watchdog.** A 30s interval catches a stream that died without emitting anything, and reconnects it.
+* **Client reset.** The shared client is only recycled when the failure was genuinely connectivity — a routine cursor close must not tear down every other repository.
+
+The backoff and watchdog intervals are instance fields (`_restartDelayMs`, `_restartMaxDelayMs`, `_watchdogIntervalMs`), not configuration.
+
+### Shutting down
+
+```js
+await this._repositoryPubSub.shutdown(correlationId);
+```
+
+Call this from the host's shutdown hook. Without it the reconnect timer keeps bringing the stream back while the process is trying to exit. The timers are `unref`'d, so they will not by themselves hold the event loop open.
 
 ## Configuration
 
@@ -109,6 +182,45 @@ Register it under `SERVICE_REPOSITORY_COLLECTIONS` from `library_server_reposito
 * **`db.<client>.connection`** — the driver connection string. Required; a missing one throws at boot rather than at the first query.
 * **`db.<client>.name`** — the database. Resolution order is: the name passed by the caller, then `db.<client>.name`, then `db.name`. A caller-supplied name always wins.
 * **`db.<client>.search.text`** — `text` for a normal text index, anything else (`atlas`) to disable `_searchFilterText`, which then returns `null` and lets the repository build its own filter.
+
+### Driver options
+
+Every option below is resolved **`db.<client>.<option>`, then `db.<option>`, then the default**. Anything still unset is left to the connection string. A value that will not coerce is ignored rather than overriding the next source, and an absent key falls through — so a configured `0` is honoured as a deliberate zero.
+
+| Option | Type | Default | Notes |
+|---|---|---|---|
+| `maxIdleTimeMS` | uint | `60000` | Recycles pooled connections before an idle NAT or load balancer drops them without a FIN |
+| `minPoolSize` | uint | `5` | Keeps a few warm, so a request after an idle period skips a fresh TLS handshake and auth |
+| `maxPoolSize` | uint | `100` | |
+| `maxConnecting` | uint | driver | |
+| `waitQueueTimeoutMS` | uint | driver | |
+| `serverSelectionTimeoutMS` | uint | `10000` | Surfaces an unreachable topology in seconds, not the driver's 30s which with retries becomes 90s of wall clock |
+| `connectTimeoutMS` | uint | `10000` | |
+| `socketTimeoutMS` | uint | unset | Deliberately unset — any useful value also kills change streams and long aggregations |
+| `heartbeatFrequencyMS` | uint | `10000` | |
+| `retryWrites` | boolean | `true` | |
+| `retryReads` | boolean | `true` | |
+| `w` | `majority` or uint | driver | |
+| `readPreference` | string | driver | |
+| `appName` | string | driver | |
+| `compressors` | list | driver | Array, or a comma separated string |
+| `zlibCompressionLevel` | uint | driver | |
+| `tls` | boolean | driver | |
+
+Booleans accept `true` / `false` / `1` / `0`, as strings or real booleans, so they survive being supplied as environment variables.
+
+### Reconnect options
+
+Same resolution order. These govern `_withMongoReconnect`.
+
+| Option | Type | Default | Notes |
+|---|---|---|---|
+| `reconnectDelayMs` | uint | `300` | First backoff delay |
+| `reconnectMaxDelayMs` | uint | `5000` | Ceiling on the backoff |
+| `reconnectRetries` | uint | `2` | Retries before the error is rethrown |
+| `reconnectBackoffMultiplier` | float ≥ 1 | `2` | |
+| `reconnectCloseTimeoutMs` | uint | `5000` | How long to wait on closing the old client before abandoning it |
+| `reconnectResetCooldownMs` | uint | `15000` | Minimum gap between client rebuilds, so a burst of failures cannot thrash the pool |
 
 ### Environment variable overrides
 

@@ -21,6 +21,26 @@ class PubSubMongoRepository extends MongoRepository {
 		this._watchdogIntervalMs = 30000;
 	}
 
+	// Opens the change stream as part of the boot's initPost sweep, the mirror of the
+	// cleanup sweep that closes it. An application that registers a pub/sub repository
+	// wants to be listening; it should not also have to start it by hand from a boot
+	// hook, and forgetting to left pub/sub silently dead.
+	async initPost() {
+		if (super.initPost)
+			await super.initPost();
+
+		if (!this._autoListen())
+			return;
+
+		await this.listen(null);
+	}
+
+	// Set db.pubSubListen false for a deployment that publishes but should not also
+	// consume - otherwise it pays for a change stream it never reads.
+	_autoListen() {
+		return this._configGetCoerced('db.pubSubListen', 'boolean') ?? true;
+	}
+
 	// A change stream is not forever: a primary stepdown, a dropped connection or a
 	// client close all end it, and the driver only resumes what it considers a
 	// resumable error. Anything else arrives here as 'error' or 'close' and the
@@ -36,8 +56,15 @@ class PubSubMongoRepository extends MongoRepository {
 		}
 	}
 
-	// Call from the host's shutdown hook, otherwise the reconnect timer keeps the
-	// stream coming back while the process is trying to exit.
+	// The name the boot's cleanup sweep looks for, so nothing has to be wired up by
+	// hand: without this the reconnect timer keeps bringing the stream back while the
+	// process is trying to exit.
+	async cleanup(correlationId) {
+		return await this.shutdown(correlationId);
+	}
+
+	// Kept as the explicit form, for a host that wants to stop pub/sub on its own
+	// terms rather than at shutdown.
 	async shutdown(correlationId) {
 		this._shutdown = true;
 		this._stopWatchdog();
@@ -246,19 +273,36 @@ class PubSubMongoRepository extends MongoRepository {
 		this._watchdogHandle = null;
 	}
 
-	// Implementations should pass { writeConcern: { w: 'majority' } } to
-	// _getCollectionFromConfig: a change stream only ever surfaces majority committed
-	// writes, so at the default w:1 a send() can report success for an insert that a
-	// later election rolls back, and that message is never delivered.
+	// Resolved from _getConfigPubSub, with the write concern applied. Override only to
+	// watch a collection this cannot reach; the write concern is not something each
+	// implementation should have to remember.
 	async _getCollectionPubSub(correlationId) {
-		throw new NotImplementedError();
+		const config = this._getConfigPubSub(correlationId);
+		if (!config)
+			throw new NotImplementedError();
+
+		return await this._getCollectionFromConfig(correlationId, config, this._getCollectionPubSubOptions(correlationId));
+	}
+
+	// Majority, because a change stream only ever surfaces majority committed writes:
+	// at the default w:1 a send() can report success for an insert that a later
+	// election rolls back, and that message is never delivered. Override per client as
+	// db.<clientName>.pubSubWriteConcern, or globally as db.pubSubWriteConcern.
+	_getCollectionPubSubOptions(correlationId) {
+		const clientName = (this._getConfigPubSub(correlationId) ?? {}).clientName;
+		const w = (clientName ? this._configGetCoerced(`db.${clientName}.pubSubWriteConcern`, 'writeConcern') : undefined) ??
+			this._configGetCoerced('db.pubSubWriteConcern', 'writeConcern') ??
+			'majority';
+		return { writeConcern: { w: w } };
 	}
 
 	// The collection config for the pub/sub collection, so the retry and the client
-	// reset act on the client that actually owns it. Returning null falls back to
-	// the default client.
+	// reset act on the client that actually owns it. Defaults to the collections
+	// service, which is where every implementation was reaching for it anyway.
 	_getConfigPubSub(correlationId) {
-		return null;
+		if (!this._collectionsConfig || !this._collectionsConfig.getCollectionPubSub)
+			return null;
+		return this._collectionsConfig.getCollectionPubSub(correlationId);
 	}
 
 	async _listen(correlationId, message) {
