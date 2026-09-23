@@ -103,27 +103,17 @@ class BaseUserMongoRepository extends MongoRepository {
 		}
 	}
 
+	// One read. The transaction that wrapped it never received the session, so it
+	// was a session checkout and an empty commit around a single findOne.
 	async refreshSettings(correlationId, userId) {
-		const collection = await this._getCollectionUsers(correlationId);
-
-		const client = await this._getClient(correlationId);
-		const session = await this._transactionInit(correlationId, client);
 		try {
-			await this._transactionStart(correlationId, session);
-
-			const data = await this._findOne(correlationId, collection, { 'id': userId });
-
+			const collection = await this._getCollectionUsers(correlationId);
 			const response = this._initResponse(correlationId);
-			response.results = data;
-
-			await this._transactionCommit(correlationId, session);
+			response.results = await this._findOne(correlationId, collection, { 'id': userId });
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(correlationId, session, null, err, 'BaseUserMongoRepository', 'refreshSettings');
-		}
-		finally {
-			await this._transactionEnd(correlationId, session);
+			return this._error('BaseUserMongoRepository', 'refreshSettings', null, err, null, null, correlationId);
 		}
 	}
 
@@ -155,62 +145,39 @@ class BaseUserMongoRepository extends MongoRepository {
 		}
 	}
 
+	// One round trip that writes. This read the user, set planId and the
+	// timestamp on the copy, and returned that without ever writing it, inside a
+	// transaction that never received the session: the plan change was not
+	// persisted.
 	async updatePlan(correlationId, id, planId) {
-		const collection = await this._getCollectionUsers(correlationId);
-
-		const client = await this._getClient(correlationId);
-		const session = await this._transactionInit(correlationId, client);
 		try {
-			await this._transactionStart(correlationId, session);
-
-			const user = await this._findOne(correlationId, collection, {'id': id});
+			const collection = await this._getCollectionUsers(correlationId);
+			const user = await this._updateFields(correlationId, collection, id, { planId: planId });
 			if (!user)
 				return this._error('BaseUserMongoRepository', 'updatePlan', 'No user found.', null, null, null, correlationId);
-			user.planId = planId;
-			user.updatedTimestamp = LibraryMomentUtility.getTimestamp();
+
 			const response = this._initResponse(correlationId);
 			response.results = user;
-
-			await this._transactionCommit(correlationId, session);
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(correlationId, session, null, err, 'BaseUserMongoRepository', 'updatePlan');
-		}
-		finally {
-			await this._transactionEnd(correlationId, session);
+			return this._error('BaseUserMongoRepository', 'updatePlan', null, err, null, null, correlationId);
 		}
 	}
 
+	// One round trip. This was a findOne and then a replaceOne of the whole
+	// document to change two fields, inside a transaction that never received the
+	// session. results is the document as written, or null for no such user, as
+	// before.
 	async updateSettings(correlationId, id, settings) {
-		const collection = await this._getCollectionUsers(correlationId);
-
-		const client = await this._getClient(correlationId);
-		const session = await this._transactionInit(correlationId, client);
 		try {
-			await this._transactionStart(correlationId, session);
-
-			const data = await this._findOne(correlationId, collection, { 'id': id });
-			if (data) {
-				data.settings = settings;
-				data.updatedTimestamp = LibraryMomentUtility.getTimestamp();
-				const results = await collection.replaceOne({ 'id': id }, data, { upsert: true });
-				// _checkUpdate returns a Response, which is always truthy; test it with _hasFailed.
-				const responseUpdate = this._checkUpdate(correlationId, results);
-				if (this._hasFailed(responseUpdate))
-					return this._error('BaseUserMongoRepository', 'updateSettings', 'Invalid settings update.', null, null, null, correlationId);
-			}
+			const collection = await this._getCollectionUsers(correlationId);
 			const response = this._initResponse(correlationId);
-			response.results = data;
-
-			await this._transactionCommit(correlationId, session);
+			response.results = await this._updateFields(correlationId, collection, id, { settings: settings });
 			return response;
 		}
 		catch (err) {
-			return this._transactionAbort(correlationId, session, null, err, 'BaseUserMongoRepository', 'updateSettings');
-		}
-		finally {
-			await this._transactionEnd(correlationId, session);
+			return this._error('BaseUserMongoRepository', 'updateSettings', null, err, null, null, correlationId);
 		}
 	}
 
@@ -227,6 +194,15 @@ class BaseUserMongoRepository extends MongoRepository {
 
 	_getDefaultPlan() {
 		throw new NotImplementedError();
+	}
+
+	// $set of the fields plus updatedTimestamp, returning the document as written,
+	// or null when there is no such user.
+	async _updateFields(correlationId, collection, id, fields) {
+		return await collection.findOneAndUpdate(
+			{ 'id': id },
+			{ $set: { ...fields, updatedTimestamp: LibraryMomentUtility.getTimestamp() } },
+			{ returnDocument: 'after', projection: { '_id': 0 } });
 	}
 }
 

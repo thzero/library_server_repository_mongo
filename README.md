@@ -55,6 +55,7 @@ The base every other repository here extends. Connection and database handles ar
 Behaviour worth knowing:
 
 * `_find` and `_findOne` suppress `_id` unless the caller's projection asks for it.
+* `_fetchExtract` is unpaged unless its trailing `options` carries a `skip` or `limit`. Unpaged, it is one query and `total` is the length of the data. Paged, it also counts, since a page cannot know the total otherwise. `options` may carry `sort` and `projection` as well.
 * The `_aggregate*` helpers build a new pipeline rather than mutating the array they are handed, so a pipeline can be reused across calls.
 * `_create` stamps `createdTimestamp`, `createdUserId`, `updatedTimestamp` and `updatedUserId` from a single clock reading, and generates an `id` only when one was not supplied.
 * `_update` uses `replaceOne` with `upsert: false` — it updates, it never silently creates.
@@ -85,11 +86,11 @@ return await this._withMongoReconnect(correlationId, config?.clientName, config?
 | File | Class | Purpose |
 |---|---|---|
 | `baseUser.js` | `BaseUserMongoRepository` | Users — fetch by id, external id, gamer id or gamer tag; settings; plan; `updateFromExternal` create-or-update from the identity provider |
-| `plans.js` | `PlansMongoRepository` | Plans — `find`, `listing` |
+| `plans.js` | `PlansMongoRepository` | Plans: `find` (served from an in-memory cache per id for five minutes, since one is read with every user fetch; `invalidate(planId)` drops it early), `listing` |
 | `news.js` | `NewsMongoRepository` | News — `latest` |
-| `usageMetrics.js` | `UsageMetricsMongoRepository` | Usage metrics — `register`, `listing`, `tag` |
+| `usageMetrics.js` | `UsageMetricsMongoRepository` | Usage metrics: `register` (buffered, see [Usage metrics buffer](#usage-metrics-buffer)), `listing`, `tag`, and `cleanup` for the shutdown flush |
 | `pubSub.js` | `PubSubMongoRepository` | A change-stream based `listen` / `send` / `shutdown` — see [Pub/sub](#pubsub) |
-| `admin/index.js` | `BaseAdminMongoRepository` | Admin CRUD — `create`, `delete`, `fetch`, `search`, `update`, each in a transaction. Gate them by overriding `_allowsCreate`, `_allowsDelete`, `_allowsUpdate`. |
+| `admin/index.js` | `BaseAdminMongoRepository` | Admin CRUD — `create`, `delete`, `fetch`, `search`, `update`, each in a transaction. Gate them by overriding `_allowsCreate`, `_allowsDelete`, `_allowsUpdate`. `search` is unpaged unless the params carry a `skip` or `limit` (and optionally a `sort`); unpaged it is one query, paged it also counts over the match stages. The base search schema allows none of these, so an application adds them to its schema and has its UI send them. |
 | `admin/baseNews.js`, `admin/baseUsers.js` | | Admin repositories for news and users |
 
 ### `collections/` — collection resolution
@@ -114,7 +115,7 @@ Register it under `SERVICE_REPOSITORY_COLLECTIONS` from `library_server_reposito
 
 | Member | Purpose |
 |---|---|
-| `_listen(correlationId, message)` | Called with `fullDocument` for each change. |
+| `_listen(correlationId, message)` | Called with `fullDocument` for each inserted document. The stream is filtered to inserts, so a TTL expiry is never delivered. |
 
 Everything else resolves itself. The collection comes from the collections service's `getCollectionPubSub`, and it is opened with `{ writeConcern: { w: 'majority' } }` — a change stream only ever surfaces majority committed writes, so at the default `w: 1` a `send` can report success for an insert a later election rolls back, and that message is never delivered. That is a property of change streams rather than of any one application, so it is not left to each implementation to remember.
 
@@ -221,6 +222,22 @@ Same resolution order. These govern `_withMongoReconnect`.
 | `reconnectBackoffMultiplier` | float ≥ 1 | `2` | |
 | `reconnectCloseTimeoutMs` | uint | `5000` | How long to wait on closing the old client before abandoning it |
 | `reconnectResetCooldownMs` | uint | `15000` | Minimum gap between client rebuilds, so a burst of failures cannot thrash the pool |
+
+### Usage metrics buffer
+
+`UsageMetricsMongoRepository.register` does not insert. It buffers the document and returns, and the buffer is written with one unordered `insertMany` when it reaches its size or the flush interval elapses, whichever comes first. One insert per response was a second database write for every request served.
+
+Same resolution order as the driver options, against the usage metrics collection's client.
+
+| Option | Type | Default | Notes |
+|---|---|---|---|
+| `usageMetricsBufferSize` | uint | `100` | Documents held before a flush is forced. `0` writes each one through as it arrives |
+| `usageMetricsBufferFlushMs` | uint ≥ 1 | `1000` | Longest a document waits when the size is not reached |
+| `usageMetricsBufferMax` | uint | `10000` | Ceiling on the buffer while the database is unreachable. Raised to the size if configured below it |
+
+* **Shutdown.** The repository has a `cleanup(correlationId)`, which the boot's cleanup sweep calls for anything registered. It flushes what is still held and stops the timer. Anything registered after that is written through rather than held. The timer is `unref`'d, so it does not by itself keep the process open.
+* **Outage.** A flush that fails on a connectivity error is requeued ahead of anything buffered since, and retried on the next interval rather than on the next request. A partial bulk write requeues only the documents the driver reports as not inserted, so a retry does not write duplicates. Past the ceiling the oldest documents are dropped; the outage, the drop, and the recovery are each logged once, with the dropped count on the recovery.
+* **Write errors.** An error that is not connectivity, such as a duplicate key, will not pass on a retry and is dropped with a warning rather than left to poison the buffer.
 
 ### Environment variable overrides
 

@@ -16,6 +16,9 @@ class PubSubMongoRepository extends MongoRepository {
 		this._shutdown = false;
 		this._watchdogHandle = null;
 
+		// client name -> collection options (the write concern), resolved once.
+		this._pubSubOptions = new Map();
+
 		this._restartDelayMs = 3000;
 		this._restartMaxDelayMs = 60000;
 		this._watchdogIntervalMs = 30000;
@@ -85,8 +88,8 @@ class PubSubMongoRepository extends MongoRepository {
 			// from _withMongoReconnect and defeats the retry entirely.
 			return await this._withMongoReconnect(correlationId, config?.clientName, config?.databaseName, async () => {
 				// Re-resolve per attempt; a handle cached across a retry still points at
-				// the client that was just recycled.
-				const target = provided ?? await this._getCollectionPubSub(correlationId);
+				// the client that was just recycled. The config is already in hand.
+				const target = provided ?? await this._getCollectionPubSub(correlationId, config);
 
 				// A single document insert is already atomic. The transaction that used to
 				// wrap this never received the session, so it committed an empty
@@ -139,16 +142,20 @@ class PubSubMongoRepository extends MongoRepository {
 
 		return await this._withMongoReconnect(correlationId, config?.clientName, config?.databaseName, async () => {
 			// Re-resolve per attempt; a handle cached across a retry still points at the
-			// client that was just recycled.
-			const target = provided ?? await this._getCollectionPubSub(correlationId);
+			// client that was just recycled. The config is already in hand.
+			const target = provided ?? await this._getCollectionPubSub(correlationId, config);
 
-			const options = { fullDocument: 'updateLookup' };
+			// Inserts only. An insert event already carries the document, so
+			// fullDocument: 'updateLookup' bought nothing, and without the filter
+			// every TTL expiry delete was sent to every listening instance only to
+			// be dropped below for having no document.
+			const options = {};
 			// Resume where the last stream stopped, so nothing published during the outage
 			// is lost. Without this a reconnect silently restarts from now.
 			if (this._resumeToken)
 				options.startAfter = this._resumeToken;
 
-			const changeStream = target.watch([], options);
+			const changeStream = target.watch([ { $match: { operationType: 'insert' } } ], options);
 			this._changeStream = changeStream;
 
 			changeStream.on('change', (next) => {
@@ -276,24 +283,33 @@ class PubSubMongoRepository extends MongoRepository {
 	// Resolved from _getConfigPubSub, with the write concern applied. Override only to
 	// watch a collection this cannot reach; the write concern is not something each
 	// implementation should have to remember.
-	async _getCollectionPubSub(correlationId) {
-		const config = this._getConfigPubSub(correlationId);
+	// config is optional: a caller that has already resolved it passes it in, so
+	// one send does not resolve it three times over.
+	async _getCollectionPubSub(correlationId, config) {
+		config = config ?? this._getConfigPubSub(correlationId);
 		if (!config)
 			throw new NotImplementedError();
 
-		return await this._getCollectionFromConfig(correlationId, config, this._getCollectionPubSubOptions(correlationId));
+		return await this._getCollectionFromConfig(correlationId, config, this._getCollectionPubSubOptions(correlationId, config));
 	}
 
 	// Majority, because a change stream only ever surfaces majority committed writes:
 	// at the default w:1 a send() can report success for an insert that a later
 	// election rolls back, and that message is never delivered. Override per client as
 	// db.<clientName>.pubSubWriteConcern, or globally as db.pubSubWriteConcern.
-	_getCollectionPubSubOptions(correlationId) {
-		const clientName = (this._getConfigPubSub(correlationId) ?? {}).clientName;
+	// Resolved once per client name; it used to be looked up again on every attempt.
+	_getCollectionPubSubOptions(correlationId, config) {
+		const clientName = (config ?? this._getConfigPubSub(correlationId) ?? {}).clientName;
+		let options = this._pubSubOptions.get(clientName);
+		if (options)
+			return options;
+
 		const w = (clientName ? this._configGetCoerced(`db.${clientName}.pubSubWriteConcern`, 'writeConcern') : undefined) ??
 			this._configGetCoerced('db.pubSubWriteConcern', 'writeConcern') ??
 			'majority';
-		return { writeConcern: { w: w } };
+		options = { writeConcern: { w: w } };
+		this._pubSubOptions.set(clientName, options);
+		return options;
 	}
 
 	// The collection config for the pub/sub collection, so the retry and the client

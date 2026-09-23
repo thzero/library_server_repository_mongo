@@ -39,6 +39,7 @@ const newCollection = () => {
 		inserted,
 		watch(pipeline, options) {
 			const stream = new FakeChangeStream(options);
+			stream.pipeline = pipeline;
 			streams.push(stream);
 			return stream;
 		},
@@ -277,6 +278,18 @@ describe('send', () => {
 describe('_getCollectionPubSub', () => {
 	// Resolves the collection itself, from the collections service, rather than
 	// throwing NotImplementedError and making each application wire it up.
+	// The stream used to be opened with no pipeline and fullDocument: 'updateLookup',
+	// so every TTL expiry delete was sent to every listening instance and dropped.
+	// An insert event carries its document already.
+	it('watches inserts only, without a lookup', async () => {
+		const collection = newCollection();
+		const repo = newRepository(collection);
+		await repo.listen('cid');
+		assert.deepEqual(collection.streams[0].pipeline, [ { $match: { operationType: 'insert' } } ]);
+		assert.equal(collection.streams[0].options.fullDocument, undefined);
+		await repo.shutdown('cid');
+	});
+
 	const newBareRepository = (tree = { db: { name: 'test' } }) => {
 		const repo = new PubSubMongoRepository();
 		inject(repo, '_logger', newLogger());
@@ -325,6 +338,31 @@ describe('_getCollectionPubSub', () => {
 		const seen = captureOptions(repo);
 		await repo._getCollectionPubSub('cid');
 		assert.deepEqual(seen.options, { writeConcern: { w: 'majority' } });
+	});
+
+	// The write concern used to be looked up from config on every attempt.
+	it('resolves the write concern once per client', async () => {
+		const repo = newBareRepository();
+		captureOptions(repo);
+		let lookups = 0;
+		const original = repo._configGetCoerced.bind(repo);
+		repo._configGetCoerced = (...args) => { lookups++; return original(...args); };
+		await repo._getCollectionPubSub('cid');
+		await repo._getCollectionPubSub('cid');
+		await repo._getCollectionPubSub('cid');
+		assert.equal(lookups, 2, 'the per-client key and the global key, once');
+	});
+
+	// send() resolved the pub/sub config three times over: once for itself, once
+	// in _getCollectionPubSub and once more in _getCollectionPubSubOptions.
+	it('send resolves the pub/sub config once', async () => {
+		const repo = newBareRepository();
+		captureOptions(repo);
+		let resolved = 0;
+		const config = repo._collectionsConfig.getCollectionPubSub();
+		repo._collectionsConfig.getCollectionPubSub = () => { resolved++; return config; };
+		await repo.send('cid', 'a', {});
+		assert.equal(resolved, 1);
 	});
 
 	it('still throws when there is no collections service to resolve from', async () => {
