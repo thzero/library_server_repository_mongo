@@ -34,7 +34,7 @@ const newConfig = (tree) => ({
 
 // Records what the driver was handed.
 const newCollection = (docs = []) => {
-	const calls = { aggregate: [], find: [], findOne: [], replaceOne: [], insertOne: [], deleteOne: [], countDocuments: [] };
+	const calls = { aggregate: [], find: [], findOne: [], replaceOne: [], insertOne: [], deleteOne: [], countDocuments: [], sort: [], skip: [], limit: [] };
 	return {
 		calls,
 		aggregate(pipeline) {
@@ -44,7 +44,18 @@ const newCollection = (docs = []) => {
 			const results = counting ? [ { count: docs.length } ] : docs;
 			return { toArray: async () => results };
 		},
-		async find(query, options) { calls.find.push({ query, options }); return { toArray: async () => docs }; },
+		async find(query, options) {
+			calls.find.push({ query, options });
+			// A cursor that honours skip and limit, so a paged fetch returns a page.
+			const state = { skip: 0, limit: undefined };
+			const cursor = {
+				sort(spec) { calls.sort.push(spec); return cursor; },
+				skip(n) { calls.skip.push(n); state.skip = n; return cursor; },
+				limit(n) { calls.limit.push(n); state.limit = n; return cursor; },
+				toArray: async () => docs.slice(state.skip, state.limit === undefined ? undefined : state.skip + state.limit)
+			};
+			return cursor;
+		},
 		async findOne(query, options) { calls.findOne.push({ query, options }); return docs[0] ?? null; },
 		async replaceOne(filter, value, options) { calls.replaceOne.push({ filter, value, options }); return { modifiedCount: 1 }; },
 		async insertOne(value) { calls.insertOne.push(value); return { insertedId: 'x' }; },
@@ -202,6 +213,92 @@ describe('_delete and _deleteOne', () => {
 		assert.equal(await repository._deleteOne('cid', collection, { id: 'a' }), true);
 		collection.deleteOne = async () => ({ deletedCount: 0 });
 		assert.equal(await repository._deleteOne('cid', collection, { id: 'a' }), false);
+	});
+});
+
+describe('_getMongoReconnectOptions', () => {
+	// Twelve config lookups, each inside a try/catch, at the top of every
+	// operation that went through _withMongoReconnect.
+	it('resolves the options once per client name', () => {
+		let lookups = 0;
+		const original = repository._configGetCoerced.bind(repository);
+		repository._configGetCoerced = (...args) => { lookups++; return original(...args); };
+
+		const first = repository._getMongoReconnectOptions('mongo');
+		assert.equal(lookups, 12);
+		assert.equal(repository._getMongoReconnectOptions('mongo'), first);
+		assert.equal(repository._getMongoReconnectOptions(' mongo '), first, 'the name is normalized before the lookup');
+		assert.equal(lookups, 12);
+
+		repository._getMongoReconnectOptions('atlas');
+		assert.equal(lookups, 24, 'another client is resolved on its own');
+	});
+
+	it('honours a per-client override', () => {
+		inject(repository, '_config', newConfig({ db: { reconnectRetries: 5, atlas: { reconnectRetries: 1 } } }));
+		assert.equal(repository._getMongoReconnectOptions('mongo').retries, 5);
+		assert.equal(repository._getMongoReconnectOptions('atlas').retries, 1);
+	});
+});
+
+describe('_fetchExtract', () => {
+	const docs = [ { id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }, { id: 'e' } ];
+
+	// Regression: this ran countDocuments next to an unlimited find, so the total
+	// it reported was always the length of the array it had just fetched. One
+	// wasted round trip per call, and a full scan when the filter was {}.
+	it('unpaged, makes one query and takes the total from the data', async () => {
+		const collection = newCollection(docs);
+		const response = await repository._fetchExtract('cid', collection, { x: 1 }, {});
+		assert.equal(collection.calls.countDocuments.length, 0);
+		assert.equal(collection.calls.find.length, 1);
+		assert.equal(response.total, 5);
+		assert.equal(response.count, 5);
+		assert.equal(response.data.length, 5);
+	});
+
+	it('a sort alone does not make it paged', async () => {
+		const collection = newCollection(docs);
+		await repository._fetchExtract('cid', collection, {}, {}, { sort: { timestamp: -1 } });
+		assert.deepEqual(collection.calls.sort, [ { timestamp: -1 } ]);
+		assert.equal(collection.calls.countDocuments.length, 0);
+	});
+
+	// A page cannot know how many there are without the count.
+	it('with a limit, counts and returns the page with the full total', async () => {
+		const collection = newCollection(docs);
+		const response = await repository._fetchExtract('cid', collection, { x: 1 }, {}, { limit: 2 });
+		assert.deepEqual(collection.calls.countDocuments, [ { x: 1 } ]);
+		assert.deepEqual(collection.calls.limit, [ 2 ]);
+		assert.equal(response.total, 5);
+		assert.equal(response.count, 2);
+		assert.deepEqual(response.data, [ { id: 'a' }, { id: 'b' } ]);
+	});
+
+	it('with a skip, counts too, since the data no longer starts at the beginning', async () => {
+		const collection = newCollection(docs);
+		const response = await repository._fetchExtract('cid', collection, {}, {}, { skip: 3 });
+		assert.equal(collection.calls.countDocuments.length, 1);
+		assert.deepEqual(collection.calls.skip, [ 3 ]);
+		assert.equal(response.total, 5);
+		assert.deepEqual(response.data, [ { id: 'd' }, { id: 'e' } ]);
+	});
+
+	it('applies sort, skip and limit together and passes the projection through', async () => {
+		const collection = newCollection(docs);
+		const response = await repository._fetchExtract('cid', collection, {}, {}, { sort: { id: 1 }, skip: 1, limit: 2, projection: { id: 1 } });
+		assert.deepEqual(collection.calls.sort, [ { id: 1 } ]);
+		assert.deepEqual(collection.calls.find[0].options.projection, { id: 1, _id: 0 });
+		assert.deepEqual(response.data, [ { id: 'b' }, { id: 'c' } ]);
+		assert.equal(response.total, 5);
+	});
+
+	it('treats a zero or non-integer skip or limit as unpaged', async () => {
+		const collection = newCollection(docs);
+		await repository._fetchExtract('cid', collection, {}, {}, { skip: 0, limit: 0 });
+		await repository._fetchExtract('cid', collection, {}, {}, { limit: '10' });
+		assert.equal(collection.calls.countDocuments.length, 0);
+		assert.equal(collection.calls.limit.length, 0);
 	});
 });
 

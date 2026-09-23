@@ -64,6 +64,9 @@ class MongoRepository extends Repository {
 
 		this._collectionsConfig = null;
 
+		// normalized client name -> resolved reconnect options.
+		this._reconnectOptions = new Map();
+
 		// this._mutexClient = new asyncMutex();
 		// this._mutexDb = new asyncMutex();
 	}
@@ -173,13 +176,20 @@ class MongoRepository extends Repository {
 		return (results && (results.length > 0) ? results[0] : null);
 	}
 
-	async _fetchExtract(correlationId, collection, query, response) {
-		const values = await Promise.all([ this._count(correlationId, collection, query), this._find(correlationId, collection, query) ]);
-		if (values) {
-			response.total = values[0];
-			response.data = await values[1].toArray();
-			response.count = response.data.length;
-		}
+	// Unpaged unless options carries a skip or a limit. Unpaged is one query, and
+	// the total is the length of what came back: a count next to an unlimited
+	// find can only ever agree with it, and on an empty filter it scans the whole
+	// collection to do so. Paged, the count runs, because a page cannot know how
+	// many there are without it. options may also carry sort and projection.
+	async _fetchExtract(correlationId, collection, query, response, options) {
+		const paged = this._isPaged(options);
+		const values = await Promise.all([
+			paged ? this._count(correlationId, collection, query) : null,
+			this._findExtract(correlationId, collection, query, options)
+		]);
+		response.data = await values[1].toArray();
+		response.count = response.data.length;
+		response.total = paged ? values[0] : response.count;
 		return response;
 	}
 
@@ -197,6 +207,28 @@ class MongoRepository extends Repository {
 			projection['_id'] = 0;
 		options.projection = projection;
 		return await collection.find(query, options);
+	}
+
+	// _find, with sort, skip and limit from options applied to the cursor.
+	async _findExtract(correlationId, collection, query, options) {
+		let cursor = await this._find(correlationId, collection, query, options ? options.projection : null);
+		if (!options)
+			return cursor;
+
+		if (options.sort)
+			cursor = cursor.sort(options.sort);
+		if (Number.isInteger(options.skip) && options.skip > 0)
+			cursor = cursor.skip(options.skip);
+		if (Number.isInteger(options.limit) && options.limit > 0)
+			cursor = cursor.limit(options.limit);
+		return cursor;
+	}
+
+	_isPaged(options) {
+		if (!options)
+			return false;
+
+		return (Number.isInteger(options.skip) && options.skip > 0) || (Number.isInteger(options.limit) && options.limit > 0);
 	}
 
 	async _findOne(correlationId, collection, query, projection) {
@@ -385,10 +417,16 @@ class MongoRepository extends Repository {
 		return db;
 	}
 
+	// Resolved once per client name. This used to run twelve config lookups, each
+	// inside a try/catch, at the top of every operation that went through
+	// _withMongoReconnect.
 	_getMongoReconnectOptions(clientName) {
 		const normalizedClientName = clientName ? clientName.trim() : this._initClientName();
-		const options = {};
+		let options = this._reconnectOptions.get(normalizedClientName);
+		if (options)
+			return options;
 
+		options = {};
 		for (const option of MongoRepository.MongoReconnectOptions) {
 			const value = this._configGetCoerced(`db.${normalizedClientName}.${option.key}`, option.type, option.min) ??
 				this._configGetCoerced(`db.${option.key}`, option.type, option.min) ??
@@ -396,6 +434,7 @@ class MongoRepository extends Repository {
 			options[option.name] = value;
 		}
 
+		this._reconnectOptions.set(normalizedClientName, options);
 		return options;
 	}
 
