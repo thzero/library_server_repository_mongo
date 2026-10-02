@@ -6,6 +6,9 @@ on:
 
 jobs:
   test:
+    # publish.yaml and build.yaml open the dev -> master PR as github-actions[bot]
+    # and merge it seconds later; they already ran npm test, so skip it here.
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     strategy:
