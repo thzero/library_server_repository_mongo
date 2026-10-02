@@ -237,11 +237,23 @@ describe('cleanup', () => {
 		collection.insertMany = () => new Promise(() => {});
 		await repository.register(doc(1));
 
-		const started = Date.now();
-		const response = await repository.cleanup('cid');
-		assert.ok(Date.now() - started < 2000, 'the cleanup waited on the flush');
-		assert.equal(repository._hasSucceeded(response), true);
-		assert.equal(repository._flushHandle, null);
+		// The cleanup deadline is unref'd and the wedged flush holds nothing, so keep
+		// the loop alive with a real (unmocked) timer or Node 22 drains it mid await
+		// and cancels the file.
+		const keepAlive = setTimeout(() => {}, 5000);
+		try {
+			const started = Date.now();
+			const response = await repository.cleanup('cid');
+			assert.ok(Date.now() - started < 2000, 'the cleanup waited on the flush');
+			assert.equal(repository._hasSucceeded(response), true);
+			assert.equal(repository._flushHandle, null);
+		}
+		finally {
+			clearTimeout(keepAlive);
+			// The abandoned flush never settles, so it is still the shared one _flush
+			// hands out; afterEach runs cleanup again and would wait on it.
+			repository._flushPromise = null;
+		}
 	});
 });
 
