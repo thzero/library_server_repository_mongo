@@ -22,6 +22,18 @@ class PubSubMongoRepository extends MongoRepository {
 		this._restartDelayMs = 3000;
 		this._restartMaxDelayMs = 60000;
 		this._watchdogIntervalMs = 30000;
+		// Consecutive reconnects before a failure that did not look like connectivity is
+		// treated as one anyway and the shared client is recycled.
+		this._restartResetAfterAttempts = 3;
+		// Ceiling on a single changeStream.close(), so a wedged cursor cannot hold the
+		// shutdown open. 0 or null waits for the driver however long it takes.
+		this._changeStreamCloseTimeoutMs = 5000;
+		// The last error the stream reported, consumed by the close and end events.
+		this._lastChangeStreamError = null;
+		// When the current stream opened, and how long it has to stay open before a later
+		// failure counts as a fresh one rather than another turn of a flap.
+		this._changeStreamOpenedAt = 0;
+		this._changeStreamHealthyAfterMs = 60000;
 	}
 
 	// Opens the change stream as part of the boot's initPost sweep, the mirror of the
@@ -49,7 +61,16 @@ class PubSubMongoRepository extends MongoRepository {
 	// resumable error. Anything else arrives here as 'error' or 'close' and the
 	// stream stays dead - previously in silence, with pub/sub simply stopping.
 	async listen(correlationId, collection) {
+		// Only the public entry clears the flag; the reconnect timer goes through
+		// _relisten. A reconnect already in flight when cleanup() ran would otherwise
+		// clear it here, reopen the stream after the shutdown had already finished, and
+		// leave a change stream that nothing is left to close - which is what held the
+		// process open through its own exit.
 		this._shutdown = false;
+		return await this._relisten(correlationId, collection);
+	}
+
+	async _relisten(correlationId, collection) {
 		try {
 			return await this._openChangeStream(correlationId, collection);
 		}
@@ -119,12 +140,64 @@ class PubSubMongoRepository extends MongoRepository {
 		// Closing emits 'close' of its own; retire this generation so the handler
 		// cannot mistake our own teardown for a failure and reconnect over the top.
 		this._changeStreamGeneration++;
+		await this._closeChangeStreamInstance(changeStream);
+	}
+
+	// close() issues a killCursors on the same connection the cursor just died on, and
+	// socketTimeoutMS is deliberately unset because any useful value kills change
+	// streams - so a half open socket can block this indefinitely. cleanup() awaits it
+	// and terminus awaits cleanup() with no deadline of its own, so an unbounded close
+	// here wedges the entire shutdown. Raced against a timer for the same reason
+	// _closeMongoClient is.
+	async _closeChangeStreamInstance(changeStream) {
+		if (!changeStream)
+			return;
+
+		// Off first: an abandoned stream must not be able to schedule a reconnect.
 		try {
 			changeStream.removeAllListeners();
-			await changeStream.close();
 		}
 		catch {
 		}
+
+		const closing = Promise.resolve()
+			.then(() => changeStream.close())
+			.then(() => true)
+			.catch(() => true);
+
+		const timeoutMs = this._changeStreamCloseTimeoutMs;
+		if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+			await closing;
+			return;
+		}
+
+		let handle = null;
+		const expired = new Promise((resolve) => {
+			handle = setTimeout(() => resolve(false), timeoutMs);
+			if (handle.unref)
+				handle.unref();
+		});
+
+		const closed = await Promise.race([ closing, expired ]);
+		if (handle)
+			clearTimeout(handle);
+		if (closed)
+			return;
+
+		// Abandoned rather than leaked: the listeners are off and nothing references the
+		// cursor, so the driver reaps it when the client closes or the socket finally fails.
+		if (this._logger)
+			this._logger.warn('PubSubMongoRepository', '_closeChangeStreamInstance', 'PubSub change stream did not close within the timeout; abandoning it.', { timeoutMs: timeoutMs }, null);
+	}
+
+	// The driver gives the close and end events nothing to go on, so a synthetic error
+	// is all there is to log. Carry the last error the stream did report as its cause,
+	// or _isMongoConnectivityError sees a bare Error and reads a dropped connection as
+	// a routine close - and then declines to recycle the client it needs to.
+	_changeStreamEventError(message) {
+		const err = this._lastChangeStreamError;
+		this._lastChangeStreamError = null;
+		return err ? new Error(message, { cause: err }) : new Error(message);
 	}
 
 	async _openChangeStream(correlationId, collection) {
@@ -144,6 +217,13 @@ class PubSubMongoRepository extends MongoRepository {
 			// Re-resolve per attempt; a handle cached across a retry still points at the
 			// client that was just recycled. The config is already in hand.
 			const target = provided ?? await this._getCollectionPubSub(correlationId, config);
+
+			// shutdown() can have run start to finish inside that await. Opening now would
+			// hand back a stream the cleanup sweep has already walked past, so nothing would
+			// ever close it and the process could not exit. Everything below is synchronous,
+			// so this is the only point the race can land.
+			if (this._shutdown || generation !== this._changeStreamGeneration)
+				return this._success(correlationId);
 
 			// Inserts only. An insert event already carries the document, so
 			// fullDocument: 'updateLookup' bought nothing, and without the filter
@@ -178,18 +258,21 @@ class PubSubMongoRepository extends MongoRepository {
 			});
 
 			changeStream.on('error', (err) => {
+				this._lastChangeStreamError = err;
 				this._scheduleReconnect(correlationId, err, 'changeStream.error', generation);
 			});
 
 			changeStream.on('close', () => {
-				this._scheduleReconnect(correlationId, new Error('Mongo change stream closed.'), 'changeStream.close', generation);
+				this._scheduleReconnect(correlationId, this._changeStreamEventError('Mongo change stream closed.'), 'changeStream.close', generation);
 			});
 
 			changeStream.on('end', () => {
-				this._scheduleReconnect(correlationId, new Error('Mongo change stream ended.'), 'changeStream.end', generation);
+				this._scheduleReconnect(correlationId, this._changeStreamEventError('Mongo change stream ended.'), 'changeStream.end', generation);
 			});
 
 			this._startWatchdog(correlationId);
+
+			this._changeStreamOpenedAt = Date.now();
 
 			this._logger.info('PubSubMongoRepository', '_openChangeStream', 'PubSub change stream opened.', { resumed: !!options.startAfter }, correlationId);
 			return this._success(correlationId);
@@ -229,8 +312,20 @@ class PubSubMongoRepository extends MongoRepository {
 			this._resumeToken = null;
 		}
 
+		// _restartAttempt only ever reset on an incoming message, which an idle topic does
+		// not have. Left that way, a stream closed on a NAT or Atlas idle timeout every few
+		// minutes walks the counter up through the backoff and into the escalation below,
+		// and recycles a client that was never broken. A stream that stayed up for a while
+		// is a fresh failure, not a flap.
+		if (this._changeStreamOpenedAt && (Date.now() - this._changeStreamOpenedAt) >= this._changeStreamHealthyAfterMs)
+			this._restartAttempt = 0;
+		this._changeStreamOpenedAt = 0;
+
 		const config = this._getConfigPubSub(correlationId);
-		const connectivity = this._isMongoConnectivityError(err);
+		// A bare close carries no driver error, so it classifies as non connectivity and
+		// the client is never recycled. Left at that, a genuinely dead client gets
+		// reopened on forever. Once the reopens stop sticking, treat it as connectivity.
+		const connectivity = this._isMongoConnectivityError(err) || this._restartAttempt >= this._restartResetAfterAttempts;
 		const delayMs = this._restartDelay();
 		this._restartAttempt++;
 		this._error('PubSubMongoRepository', source, `PubSub change stream lost; reconnect attempt ${this._restartAttempt} in ${delayMs}ms.`, err, null, null, correlationId);
@@ -245,7 +340,7 @@ class PubSubMongoRepository extends MongoRepository {
 				// a routine cursor close must not tear down every other repository.
 				if (connectivity && config)
 					await this._resetMongoConnection(correlationId, config.clientName, config.databaseName);
-				await this.listen(correlationId);
+				await this._relisten(correlationId);
 			}
 			catch (err2) {
 				this._scheduleReconnect(correlationId, err2, 'changeStream.reconnect', this._changeStreamGeneration);

@@ -228,6 +228,21 @@ describe('cleanup', () => {
 		assert.equal(repository._hasSucceeded(response), true);
 		assert.equal(collection.calls.insertMany.length, 0);
 	});
+
+	// The cleanup sweep awaits this and terminus awaits the sweep with no deadline of
+	// its own, so a flush that never comes back wedges the whole shutdown. Losing a
+	// buffered batch of telemetry is much the cheaper outcome.
+	it('gives up on a flush that never comes back', async () => {
+		repository._cleanupTimeoutMs = 20;
+		collection.insertMany = () => new Promise(() => {});
+		await repository.register(doc(1));
+
+		const started = Date.now();
+		const response = await repository.cleanup('cid');
+		assert.ok(Date.now() - started < 2000, 'the cleanup waited on the flush');
+		assert.equal(repository._hasSucceeded(response), true);
+		assert.equal(repository._flushHandle, null);
+	});
 });
 
 describe('a failed flush', () => {
