@@ -1,0 +1,29 @@
+name: Test CI
+
+on:
+    pull_request:
+    workflow_dispatch:
+
+jobs:
+  test:
+    # publish.yaml and build.yaml open the dev -> master PR as github-actions[bot]
+    # and merge it seconds later; they already ran npm test, so skip it here.
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [22.x]
+
+    steps:
+    - uses: actions/checkout@v7
+    - name: Initialize Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ matrix.node-version }}
+    - name: Node Dependencies
+      run: |
+        npm install --no-package-lock
+    - name: Test
+      run: |
+        npm test

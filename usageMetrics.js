@@ -24,6 +24,9 @@ class UsageMetricsMongoRepository extends MongoRepository {
 		this._flushHandle = null;
 		this._flushPromise = null;
 		this._shutdown = false;
+		// Ceiling on the final flush at cleanup. 0 or null waits for the write however
+		// long it takes.
+		this._cleanupTimeoutMs = 5000;
 	}
 
 	// The name the boot's cleanup sweep looks for. Flushes whatever is still held
@@ -32,8 +35,41 @@ class UsageMetricsMongoRepository extends MongoRepository {
 	async cleanup(correlationId) {
 		this._shutdown = true;
 		this._stopFlushTimer();
-		await this._flush(correlationId);
+		// The flush is a Mongo write and socketTimeoutMS is unset, so on a wedged socket it
+		// can outlast any sensible shutdown. The cleanup sweep awaits this and terminus
+		// awaits the sweep with no deadline of its own, so an unbounded flush here wedges
+		// the exit outright - and losing a buffered batch of telemetry is much the cheaper
+		// outcome than a process that will not stop.
+		await this._flushWithTimeout(correlationId);
 		return this._success(correlationId);
+	}
+
+	async _flushWithTimeout(correlationId) {
+		// _flush never rejects, but the catch costs nothing and a throw here would take
+		// the rest of the cleanup sweep with it.
+		const flushing = this._flush(correlationId).then(() => true).catch(() => true);
+
+		const timeoutMs = this._cleanupTimeoutMs;
+		if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+			await flushing;
+			return;
+		}
+
+		let handle = null;
+		const expired = new Promise((resolve) => {
+			handle = setTimeout(() => resolve(false), timeoutMs);
+			if (handle.unref)
+				handle.unref();
+		});
+
+		const flushed = await Promise.race([ flushing, expired ]);
+		if (handle)
+			clearTimeout(handle);
+		if (flushed)
+			return;
+
+		if (this._logger)
+			this._logger.warn('UsageMetricsMongoRepository', 'cleanup', 'Usage metrics flush did not complete within the timeout; abandoning the buffer.', { timeoutMs: timeoutMs, count: this._buffer.length }, correlationId);
 	}
 
 	// Never rejects. A failed flush is logged and its documents requeued, so the

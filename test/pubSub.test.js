@@ -417,3 +417,152 @@ describe('initPost', () => {
 		await repo.shutdown('cid');
 	});
 });
+
+// The reconnect machinery has to cooperate with the shutdown it runs alongside.
+// It used to do the opposite: a wedged close blocked the cleanup sweep, and a
+// reconnect still in flight reopened the stream after the sweep had walked past.
+describe('shutdown', () => {
+	it('abandons a change stream that will not close', async () => {
+		const collection = newCollection();
+		const repo = newRepository(collection);
+		repo._changeStreamCloseTimeoutMs = 20;
+		await repo.listen('cid');
+		// socketTimeoutMS is unset for change streams, so the killCursors that close()
+		// issues can block on a half open socket for as long as the OS allows.
+		collection.streams[0].close = () => new Promise(() => {});
+
+		const started = Date.now();
+		await repo.shutdown('cid');
+		assert.ok(Date.now() - started < 2000, 'the shutdown waited on the close');
+	});
+
+	// Regression: the reconnect went through the public listen(), which opened by
+	// clearing _shutdown. A shutdown that landed while the reconnect sat in one of
+	// its own awaits was undone, and the stream it then opened was one the cleanup
+	// sweep had already passed - so nothing was left to close it, and the process
+	// could not exit through its own shutdown.
+	it('is not undone by a reconnect already in flight', async () => {
+		const collection = newCollection();
+		const repo = newRepository(collection);
+		await repo.listen('cid');
+		assert.equal(collection.streams.length, 1);
+
+		// park the reconnect where the shutdown can overtake it: past its own
+		// _shutdown check, inside the client reset
+		let release;
+		const parked = new Promise((resolve) => { release = resolve; });
+		let reached = false;
+		repo._resetMongoConnection = async () => { reached = true; await parked; };
+
+		const dropped = new Error('connection 1 to cluster timed out');
+		dropped.name = 'MongoNetworkTimeoutError';
+		collection.streams[0].emit('error', dropped);
+
+		await waitFor(() => reached, 'the reconnect never reached the client reset');
+		await repo.shutdown('cid');
+		release();
+		await settle();
+
+		assert.equal(repo._shutdown, true, 'the reconnect cleared the shutdown flag');
+		assert.equal(collection.streams.length, 1, 'the reconnect reopened after the sweep had finished');
+		assert.equal(repo._changeStream, null, 'an orphan stream was left holding the loop open');
+	});
+
+	// The open has to be past its own entry check before the shutdown lands, or this
+	// only re-tests that check rather than the one after the collection await.
+	it('does not open one when the shutdown lands while the collection resolves', async () => {
+		const collection = newCollection();
+		const repo = newRepository(collection);
+		let release;
+		const parked = new Promise((resolve) => { release = resolve; });
+		let reached = false;
+		repo._getCollectionPubSub = async () => { reached = true; await parked; return collection; };
+
+		const listening = repo.listen('cid');
+		await waitFor(() => reached, 'the open never reached the collection');
+		assert.equal(repo._shutdown, false, 'the open had not passed its entry check yet');
+
+		await repo.shutdown('cid');
+		release();
+		await listening;
+
+		assert.equal(collection.streams.length, 0);
+		assert.equal(repo._changeStream, null);
+	});
+
+	it('still reopens on an explicit listen afterwards', async () => {
+		const collection = newCollection();
+		const repo = newRepository(collection);
+		await repo.listen('cid');
+		await repo.shutdown('cid');
+		await repo.listen('cid');
+
+		assert.equal(collection.streams.length, 2);
+		assert.equal(repo._shutdown, false);
+		await repo.shutdown('cid');
+	});
+});
+
+// A close event carries nothing from the driver, so the error it is reported with
+// is synthetic. A bare Error classifies as non connectivity, which left a dead
+// client to be reopened on forever.
+describe('a close with no error event behind it', () => {
+	it('carries the last error the stream did report', async () => {
+		const repo = newRepository(newCollection());
+		const dropped = new Error('connection 1 to cluster timed out');
+		dropped.name = 'MongoNetworkTimeoutError';
+		repo._lastChangeStreamError = dropped;
+
+		const synthetic = repo._changeStreamEventError('Mongo change stream closed.');
+		assert.equal(synthetic.cause, dropped);
+		assert.equal(repo._isMongoConnectivityError(synthetic), true);
+		assert.equal(repo._lastChangeStreamError, null, 'the cause has to be consumed once');
+	});
+
+	it('stays non connectivity when there is nothing behind it', async () => {
+		const repo = newRepository(newCollection());
+		const synthetic = repo._changeStreamEventError('Mongo change stream closed.');
+		assert.equal(synthetic.cause, undefined);
+		assert.equal(repo._isMongoConnectivityError(synthetic), false);
+	});
+
+	it('recycles the client once the reopens stop sticking', async () => {
+		const collection = newCollection();
+		const repo = newRepository(collection);
+		// nothing counts as healthy, so every close is another turn of a flap
+		repo._changeStreamHealthyAfterMs = 100000;
+		let resets = 0;
+		repo._resetMongoConnection = async () => { resets++; };
+		await repo.listen('cid');
+
+		for (let i = 0; i < 4; i++) {
+			collection.streams[collection.streams.length - 1].emit('close');
+			await waitFor(() => collection.streams.length === i + 2, 'the stream did not reopen');
+		}
+
+		assert.ok(resets >= 1, 'a flapping stream never recycled the client');
+		await repo.shutdown('cid');
+	});
+
+	// _restartAttempt only ever reset on an incoming message, which an idle topic
+	// does not have. An idle stream closed on a NAT timeout every few minutes would
+	// walk the counter up through the backoff and into the escalation above.
+	it('leaves the client alone for a stream that had stayed up', async () => {
+		const collection = newCollection();
+		const repo = newRepository(collection);
+		repo._changeStreamHealthyAfterMs = 10;
+		let resets = 0;
+		repo._resetMongoConnection = async () => { resets++; };
+		await repo.listen('cid');
+
+		for (let i = 0; i < 4; i++) {
+			repo._changeStreamOpenedAt = Date.now() - 1000;
+			collection.streams[collection.streams.length - 1].emit('close');
+			await waitFor(() => collection.streams.length === i + 2, 'the stream did not reopen');
+		}
+
+		assert.equal(resets, 0, 'a client that was never broken got recycled');
+		assert.equal(repo._restartAttempt, 1, 'the attempt counter walked up on a healthy stream');
+		await repo.shutdown('cid');
+	});
+});

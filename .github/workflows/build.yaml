@@ -61,6 +61,12 @@ jobs:
       run: |
         # npm run cli-update -- --silent
         library-cli --updateversion --pi --silent
+    - name: Node Dependencies for Tests
+      run: |
+        npm install --no-package-lock
+    - name: Test
+      run: |
+        npm test
     - name: Git Check
       id: git-changes
       if: success()
