@@ -431,9 +431,18 @@ describe('shutdown', () => {
 		// issues can block on a half open socket for as long as the OS allows.
 		collection.streams[0].close = () => new Promise(() => {});
 
-		const started = Date.now();
-		await repo.shutdown('cid');
-		assert.ok(Date.now() - started < 2000, 'the shutdown waited on the close');
+		// The close deadline is unref'd so it never holds a real process open, and the
+		// wedged close holds nothing either; without a referenced handle of its own the
+		// loop drains mid await and the runner cancels the file (Node 22).
+		const keepAlive = setTimeout(() => {}, 5000);
+		try {
+			const started = Date.now();
+			await repo.shutdown('cid');
+			assert.ok(Date.now() - started < 2000, 'the shutdown waited on the close');
+		}
+		finally {
+			clearTimeout(keepAlive);
+		}
 	});
 
 	// Regression: the reconnect went through the public listen(), which opened by
