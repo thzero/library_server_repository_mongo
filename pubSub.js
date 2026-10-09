@@ -326,9 +326,17 @@ class PubSubMongoRepository extends MongoRepository {
 		// the client is never recycled. Left at that, a genuinely dead client gets
 		// reopened on forever. Once the reopens stop sticking, treat it as connectivity.
 		const connectivity = this._isMongoConnectivityError(err) || this._restartAttempt >= this._restartResetAfterAttempts;
+		// A bare close or end with nothing behind it, on a stream that was not already
+		// flapping, is the server or a NAT reaping an idle cursor. The resume token makes
+		// the reopen lossless, so it is not an error and does not need a stack trace.
+		// Anything carrying a driver error, or a reopen that did not stick, still is.
+		const routine = !connectivity && !err?.cause && !err?.code && this._restartAttempt === 0;
 		const delayMs = this._restartDelay();
 		this._restartAttempt++;
-		this._error('PubSubMongoRepository', source, `PubSub change stream lost; reconnect attempt ${this._restartAttempt} in ${delayMs}ms.`, err, null, null, correlationId);
+		if (routine)
+			this._logger.info('PubSubMongoRepository', source, `PubSub change stream closed; reopening in ${delayMs}ms.`, null, correlationId);
+		else
+			this._error('PubSubMongoRepository', source, `PubSub change stream lost; reconnect attempt ${this._restartAttempt} in ${delayMs}ms.`, err, null, null, correlationId);
 
 		this._restartHandle = setTimeout(async () => {
 			this._restartHandle = null;
