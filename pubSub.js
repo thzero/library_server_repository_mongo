@@ -154,8 +154,13 @@ class PubSubMongoRepository extends MongoRepository {
 			return;
 
 		// Off first: an abandoned stream must not be able to schedule a reconnect.
+		// An 'error' sink has to go straight back on. The driver can still emit 'error'
+		// after this, e.g. an internal resume already in flight that then fails on a
+		// cleared pool, and an EventEmitter with no 'error' listener throws it as an
+		// uncaught exception, which takes the whole process down.
 		try {
 			changeStream.removeAllListeners();
+			changeStream.on('error', () => {});
 		}
 		catch {
 		}
