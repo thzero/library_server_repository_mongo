@@ -57,6 +57,35 @@ class BaseUserMongoRepository extends MongoRepository {
 		}
 	}
 
+	// The user a sign-in ([type], [id]) is linked to: in their logins ([ { type, id } ]), or as
+	// their external account (a user who has only signed in through it). [excludeId] skips that
+	// user, to find another account linked to the same sign-in. A user merged into another
+	// (mergedInto) is retired and never found. For accounts with several sign-ins
+	// (@thzero/library_server_auth_providers, AccountsService).
+	async fetchByLogin(correlationId, type, id, excludeId) {
+		try {
+			const response = this._initResponse(correlationId);
+
+			const query = {
+				$or: [
+					{ logins: { $elemMatch: { type, id } } },
+					{ 'external.type': type, 'external.id': id }
+				],
+				mergedInto: { $exists: false }
+			};
+			if (excludeId)
+				query.id = { $ne: excludeId };
+
+			const collectionUsers = await this._getCollectionUsers(correlationId);
+			response.results = await this._findOne(correlationId, collectionUsers, query);
+			response.success = response.results !== null;
+			return response;
+		}
+		catch (err) {
+			return this._error('BaseUserMongoRepository', 'fetchByLogin', null, err, null, null, correlationId);
+		}
+	}
+
 	async fetchByGamerId(correlationId, gamerId, excludePlan) {
 		try {
 			const response = this._initResponse(correlationId);

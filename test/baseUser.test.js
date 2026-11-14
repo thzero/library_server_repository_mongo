@@ -86,6 +86,30 @@ describe('fetch', () => {
 	});
 });
 
+describe('fetchByLogin', () => {
+	it('looks a sign-in up in the logins and the external account, never a retired user', async () => {
+		await repository.fetchByLogin('cid', 'steam', '7656');
+		assert.deepEqual(collection.calls.findOne[0].query, {
+			$or: [
+				{ logins: { $elemMatch: { type: 'steam', id: '7656' } } },
+				{ 'external.type': 'steam', 'external.id': '7656' }
+			],
+			mergedInto: { $exists: false }
+		});
+	});
+
+	it('skips the user it is asked to', async () => {
+		await repository.fetchByLogin('cid', 'steam', '7656', 'u1');
+		assert.deepEqual(collection.calls.findOne[0].query.id, { $ne: 'u1' });
+	});
+
+	it('reports no user as a failure, and asks for no plan', async () => {
+		const response = await repository.fetchByLogin('cid', 'steam', '7656');
+		assert.equal(response.success, false);
+		assert.equal(planFinds.length, 0);
+	});
+});
+
 describe('updateSettings', () => {
 	// Regression: findOne, then replaceOne of the whole document to change two
 	// fields, inside a transaction that never received the session.
