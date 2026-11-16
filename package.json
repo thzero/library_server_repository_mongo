@@ -1,11 +1,11 @@
 {
   "name": "@thzero/library_server_repository_mongo",
   "type": "module",
-  "version": "0.19.11",
+  "version": "0.19.12",
   "version_major": 0,
   "version_minor": 19,
-  "version_patch": 11,
-  "version_date": "11/14/2026",
+  "version_patch": 12,
+  "version_date": "11/15/2026",
   "author": "thZero",
   "author_url": "https://www.thzero.com",
   "copyright": "2020-2026",
@@ -28,7 +28,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "mongodb": "^7.8.0"
+    "mongodb": "^7.9.0"
   },
   "peerDependencies": {
     "@thzero/library_common": "^0.19",
@@ -36,6 +36,6 @@
     "@thzero/library_server": "^0.19"
   },
   "devDependencies": {
-    "eslint": "^10.14.0"
+    "eslint": "^10.15.0"
   }
 }
