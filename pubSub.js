@@ -1,3 +1,5 @@
+import { ObjectId } from 'mongodb';
+
 import MongoRepository from './index.js';
 
 import NotImplementedError from '@thzero/library_common/errors/notImplemented.js';
@@ -103,6 +105,13 @@ class PubSubMongoRepository extends MongoRepository {
 	async send(correlationId, type, params, collection) {
 		const config = this._getConfigPubSub(correlationId);
 		const provided = collection;
+		const message = {
+			_id: new ObjectId(),
+			type: type,
+			params: params,
+			timestamp: new Date() // has to be a date for the Mongo TTL index to work
+		};
+		let attempt = 0;
 		try {
 			// The retry has to wrap the insert, and the insert has to be free to throw
 			// out of here - catching inside the operation hides every connectivity error
@@ -117,11 +126,15 @@ class PubSubMongoRepository extends MongoRepository {
 				// transaction, cost two extra round trips, and never ended the session -
 				// leaking one per publish. The insert was not awaited either, so a failure
 				// surfaced as an unhandled rejection and the commit raced it.
-				await target.insertOne({
-					type: type,
-					params: params,
-					timestamp: new Date() // has to be a date for the Mongo TTL index to work
-				});
+				attempt++;
+				try {
+					await target.insertOne({ ...message });
+				}
+				catch (err) {
+					if ((attempt > 1) && err && (err.code === 11000))
+						return this._success(correlationId);
+					throw err;
+				}
 
 				return this._success(correlationId);
 			});
@@ -246,14 +259,11 @@ class PubSubMongoRepository extends MongoRepository {
 			changeStream.on('change', (next) => {
 				this._resumeToken = next._id ?? changeStream.resumeToken ?? this._resumeToken;
 				this._restartAttempt = 0;
-				try {
-					if (!next.fullDocument)
-						return;
-					this._listen(correlationId, next.fullDocument);
-				}
-				catch (err) {
-					this._error('PubSubMongoRepository', 'listen.onchange', null, err, null, null, correlationId);
-				}
+				if (!next.fullDocument)
+					return;
+				Promise.resolve()
+					.then(() => this._listen(correlationId, next.fullDocument))
+					.catch((err) => this._error('PubSubMongoRepository', 'listen.onchange', null, err, null, null, correlationId));
 			});
 
 			// The server hands out a token after every batch, including empty ones, so an

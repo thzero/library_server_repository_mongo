@@ -3,6 +3,7 @@ import { Mutex as asyncMutex } from 'async-mutex';
 
 import LibraryServerRepositoryConstants from './constants.js';
 
+import LibraryCommonConstants from '@thzero/library_common/constants.js';
 import LibraryCommonUtility from '@thzero/library_common/utility/index.js';
 import LibraryMomentUtility from '@thzero/library_common/utility/moment.js';
 
@@ -685,12 +686,21 @@ class MongoRepository extends Repository {
 		session.startTransaction();
 	}
 
-	async _update(correlationId, collection, userId, id, value, idName) {
+	async _update(correlationId, collection, userId, id, value, idName, options) {
 		const response = this._initResponse(correlationId);
+
+		const expected = options ? options.expectedUpdatedTimestamp : undefined;
+		const filter = { id: id };
+		if ((expected !== undefined) && (expected !== null))
+			filter.updatedTimestamp = expected;
 
 		value.updatedTimestamp = LibraryMomentUtility.getTimestamp();
 		value.updatedUserId = userId;
-		const results = await collection.replaceOne({id: id}, value, {upsert: false});
+		const results = await collection.replaceOne(filter, value, {upsert: false});
+		if (results && (filter.updatedTimestamp !== undefined) && (results.matchedCount === 0))
+			return this._error('MongoRepository', '_update', 'Invalid timestamp.', null, null, null, correlationId)
+				.addGeneric('Object already changed', LibraryCommonConstants.ErrorCodes.ObjectChanged);
+
 		const responseUpdate = this._checkUpdate(correlationId, results);
 		if (this._hasFailed(responseUpdate))
 			return responseUpdate;

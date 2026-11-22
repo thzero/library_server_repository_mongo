@@ -100,7 +100,31 @@ describe('listen', () => {
 		await repo.listen('cid');
 
 		collection.streams[0].emit('change', { _id: { t: 1 }, fullDocument: { type: 'a' } });
+		await waitFor(() => received.length === 1, 'the message was delivered');
 		assert.deepEqual(received, [ { type: 'a' } ]);
+		await repo.shutdown('cid');
+	});
+
+	it('catches a _listen that rejects and keeps delivering', async () => {
+		const collection = newCollection();
+		const received = [];
+		const repo = newRepository(collection, received);
+		const errors = [];
+		repo._error = (clazz, method, message, err) => { errors.push(err.message); };
+		let calls = 0;
+		repo._listen = async (correlationId, message) => {
+			calls++;
+			if (calls === 1)
+				throw new Error('bad message');
+			received.push(message);
+		};
+		await repo.listen('cid');
+
+		collection.streams[0].emit('change', { _id: { t: 1 }, fullDocument: { type: 'bad' } });
+		collection.streams[0].emit('change', { _id: { t: 2 }, fullDocument: { type: 'good' } });
+		await waitFor(() => received.length === 1 && errors.length === 1, 'the failure was caught and the next message delivered');
+		assert.deepEqual(errors, [ 'bad message' ]);
+		assert.deepEqual(received, [ { type: 'good' } ]);
 		await repo.shutdown('cid');
 	});
 
@@ -258,6 +282,37 @@ describe('send', () => {
 		const response = await repo.send('cid', 'a-type', {});
 		assert.equal(response.success, true);
 		assert.equal(attempts, 3);
+	});
+
+	it('retries with the same _id, and takes a duplicate key on a retry as success', async () => {
+		const collection = newCollection();
+		const ids = [];
+		collection.insertOne = async (value) => {
+			ids.push(String(value._id));
+			if (ids.length === 1) {
+				const err = new Error('connection <monitor> timed out');
+				err.name = 'MongoNetworkTimeoutError';
+				throw err;
+			}
+			const dup = new Error('E11000 duplicate key');
+			dup.code = 11000;
+			throw dup;
+		};
+		const repo = newRepository(collection);
+		repo._resetMongoConnection = async () => true;
+		repo._pause = async () => {};
+
+		const response = await repo.send('cid', 'a-type', {});
+		assert.equal(response.success, true);
+		assert.equal(ids.length, 2);
+		assert.equal(ids[0], ids[1]);
+	});
+
+	it('does not take a duplicate key on the first attempt as success', async () => {
+		const collection = newCollection();
+		collection.insertOne = async () => { const dup = new Error('E11000'); dup.code = 11000; throw dup; };
+		const response = await newRepository(collection).send('cid', 'a-type', {});
+		assert.notEqual(response.success, true);
 	});
 
 	// Regression: a session was opened and a transaction started for an insert that

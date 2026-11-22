@@ -179,3 +179,39 @@ describe('refreshSettings', () => {
 		assert.equal(repository._hasFailed(response), true);
 	});
 });
+
+describe('updateFromExternal', () => {
+	it('sets only the synced fields on an existing user and keeps the rest', async () => {
+		const response = await repository.updateFromExternal('cid', 'u1', {
+			id: 'u1', planId: 'stale', settings: { theme: 'stale' }, email: 'a@b.com', external: { id: 'u1', name: 'New' }
+		}, [ 'external', 'email' ]);
+		assert.equal(repository._hasSucceeded(response), true);
+		assert.equal(collection.calls.replaceOne.length, 0);
+
+		const call = collection.calls.findOneAndUpdate[0];
+		assert.deepEqual(Object.keys(call.update.$set).sort(), [ 'email', 'external', 'updatedTimestamp' ]);
+		assert.equal(call.update.$setOnInsert.planId, 'stale', 'the other fields are only written on insert');
+		assert.equal(call.update.$setOnInsert.external, undefined, 'a field is in one operator only');
+		assert.equal(call.options.upsert, true);
+
+		assert.equal(response.results.planId, 'free', 'the stored plan was not put back');
+		assert.deepEqual(response.results.settings, { theme: 'dark' });
+		assert.equal(response.results.external.name, 'New');
+	});
+
+	it('replaces the whole document when no fields are named, as before', async () => {
+		const response = await repository.updateFromExternal('cid', 'u1', { id: 'u1', logins: [ { type: 'steam', id: 's1' } ] });
+		assert.equal(repository._hasSucceeded(response), true);
+		assert.equal(collection.calls.findOneAndUpdate.length, 0);
+		assert.equal(collection.calls.replaceOne.length, 1);
+		assert.deepEqual(collection.calls.replaceOne[0].value.logins, [ { type: 'steam', id: 's1' } ]);
+		assert.equal(collection.calls.replaceOne[0].options.upsert, true);
+	});
+
+	it('sets the created fields when inserting', async () => {
+		await repository.updateFromExternal('cid', 'u9', { id: 'u9', external: { id: 'u9' } }, [ 'external', 'email' ]);
+		const onInsert = collection.calls.findOneAndUpdate[0].update.$setOnInsert;
+		assert.ok(onInsert.createdTimestamp);
+		assert.equal(onInsert.createdUserId, 'u9');
+	});
+});

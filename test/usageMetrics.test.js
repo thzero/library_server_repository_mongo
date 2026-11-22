@@ -223,6 +223,33 @@ describe('cleanup', () => {
 		assert.equal(repository._buffer.length, 0);
 	});
 
+	it('also flushes what was registered while a timer flush was in flight', async () => {
+		let release;
+		const gate = new Promise((resolve) => { release = resolve; });
+		const insertMany = collection.insertMany.bind(collection);
+		let first = true;
+		collection.insertMany = async (values, options) => {
+			if (first) {
+				first = false;
+				await gate;
+			}
+			return insertMany(values, options);
+		};
+
+		await repository.register(doc(1));
+		mock.timers.tick(1000);
+		await settle();
+		assert.notEqual(repository._flushPromise, null, 'the timer flush is in flight');
+
+		await repository.register(doc(2));
+		const cleaning = repository.cleanup('cid');
+		release();
+		await cleaning;
+
+		assert.deepEqual(collection.calls.insertMany.map(c => c.values), [ [ doc(1) ], [ doc(2) ] ]);
+		assert.equal(repository._buffer.length, 0);
+	});
+
 	it('is safe with nothing buffered', async () => {
 		const response = await repository.cleanup('cid');
 		assert.equal(repository._hasSucceeded(response), true);
