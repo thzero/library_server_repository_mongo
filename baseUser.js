@@ -146,7 +146,7 @@ class BaseUserMongoRepository extends MongoRepository {
 		}
 	}
 
-	async updateFromExternal(correlationId, id, user) {
+	async updateFromExternal(correlationId, id, user, fields) {
 		try {
 			const timestamp = LibraryMomentUtility.getTimestamp();
 			const collection = await this._getCollectionUsers(correlationId);
@@ -159,14 +159,37 @@ class BaseUserMongoRepository extends MongoRepository {
 			if (!user.createdUserId)
 				user.createdUserId = user.id ?? id;
 
-			const results = await collection.replaceOne({ 'id': id }, user, {upsert: true});
-			// _checkUpdate returns a Response, which is always truthy; test it with _hasFailed.
-			const responseUpdate = this._checkUpdate(correlationId, results);
-			if (this._hasFailed(responseUpdate))
+			if (!Array.isArray(fields)) {
+				const results = await collection.replaceOne({ 'id': id }, user, {upsert: true});
+				// _checkUpdate returns a Response, which is always truthy; test it with _hasFailed.
+				const responseUpdate = this._checkUpdate(correlationId, results);
+				if (this._hasFailed(responseUpdate))
+					return this._error('BaseUserMongoRepository', 'updateFromExternal', 'Invalid user update.', null, null, null, correlationId);
+
+				const response = this._initResponse(correlationId);
+				response.results = user;
+				return response;
+			}
+
+			const set = { updatedTimestamp: user.updatedTimestamp };
+			for (const field of fields) {
+				if (user[field] !== undefined)
+					set[field] = user[field];
+			}
+			const { _id, ...rest } = user;
+			const onInsert = { ...rest };
+			for (const key of Object.keys(set))
+				delete onInsert[key];
+
+			const results = await collection.findOneAndUpdate(
+				{ 'id': id },
+				{ $set: set, $setOnInsert: onInsert },
+				{ upsert: true, returnDocument: 'after', projection: { '_id': 0 } });
+			if (!results)
 				return this._error('BaseUserMongoRepository', 'updateFromExternal', 'Invalid user update.', null, null, null, correlationId);
-	
+
 			const response = this._initResponse(correlationId);
-			response.results = user;
+			response.results = results;
 			return response;
 		}
 		catch (err) {

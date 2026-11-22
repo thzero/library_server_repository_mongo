@@ -124,9 +124,11 @@ class BaseAdminMongoRepository extends MongoRepository {
 			
 			const collection = await this._getCollectionAdmin(correlationId);
 
-			const response = await this._update(correlationId, collection, userId, value.id, value);
-			if (this._hasFailed(response))
-				return this._transactionAbort(correlationId, session, 'Unable to update the value');
+			const response = await this._update(correlationId, collection, userId, value.id, value, null, { expectedUpdatedTimestamp: value.updatedTimestamp });
+			if (this._hasFailed(response)) {
+				await this._transactionAbort(correlationId, session, 'Unable to update the value');
+				return response;
+			}
 
 			await this._transactionCommit(correlationId, session);
 			return response;

@@ -44,10 +44,18 @@ class UsageMetricsMongoRepository extends MongoRepository {
 		return this._success(correlationId);
 	}
 
+	async _drain(correlationId) {
+		while (this._flushPromise || (this._buffer.length > 0)) {
+			await this._flush(correlationId);
+			if (this._flushFailing)
+				return;
+		}
+	}
+
 	async _flushWithTimeout(correlationId) {
 		// _flush never rejects, but the catch costs nothing and a throw here would take
 		// the rest of the cleanup sweep with it.
-		const flushing = this._flush(correlationId).then(() => true).catch(() => true);
+		const flushing = this._drain(correlationId).then(() => true).catch(() => true);
 
 		const timeoutMs = this._cleanupTimeoutMs;
 		if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {

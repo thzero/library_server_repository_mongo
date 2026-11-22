@@ -120,6 +120,18 @@ describe('update', () => {
 		assert.deepEqual(session.events, [ 'start', 'abort', 'end' ]);
 	});
 
+	it('replaces only if the stored timestamp is still the one checked', async () => {
+		await repository.update('cid', 'u1', { id: 'a', updatedTimestamp: 42 });
+		assert.deepEqual(collection.calls.replaceOne[0].filter, { id: 'a', updatedTimestamp: 42 });
+	});
+
+	it('reports the object as changed when someone saved in between', async () => {
+		collection.replaceOne = async () => ({ matchedCount: 0, modifiedCount: 0, upsertedCount: 0 });
+		const response = await repository.update('cid', 'u1', { id: 'a', updatedTimestamp: 42 });
+		assert.equal(repository._hasFailed(response), true);
+		assert.equal(response.errors[0].code, 'objectChanged');
+	});
+
 	it('carries the correlationId when updating is not allowed', async () => {
 		Object.defineProperty(repository, '_allowsUpdate', { get: () => false });
 		const response = await repository.update('cid-123', 'u1', { id: 'a' });
